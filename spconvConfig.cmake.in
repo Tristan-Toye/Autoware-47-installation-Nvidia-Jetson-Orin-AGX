@@ -1,0 +1,31 @@
+# spconvConfig.cmake.in
+# Minimal config so find_package(spconv) works and brings in cumm (tensorview headers).
+
+# Replace @PREFIX@ via the installer
+set(_spconv_prefix "@PREFIX@")
+
+# We installed a static lib above; import accordingly.
+find_library(_spconv_lib NAMES spconv libspconv
+  PATHS "${_spconv_prefix}/lib"
+  NO_DEFAULT_PATH)
+if(NOT _spconv_lib)
+  message(FATAL_ERROR "libspconv not found under ${_spconv_prefix}/lib")
+endif()
+
+include(CMakeFindDependencyMacro)
+find_dependency(cumm REQUIRED)
+
+add_library(spconv::spconv STATIC IMPORTED)
+set_target_properties(spconv::spconv PROPERTIES
+  IMPORTED_LOCATION "${_spconv_lib}"
+  INTERFACE_INCLUDE_DIRECTORIES "${_spconv_prefix}/include/spconv"
+  INTERFACE_LINK_LIBRARIES "cumm::cumm"
+)
+
+# (Optional) also propagate cumm's include dirs explicitly
+get_target_property(_cumm_inc cumm::cumm INTERFACE_INCLUDE_DIRECTORIES)
+if(_cumm_inc)
+  set_property(TARGET spconv::spconv APPEND PROPERTY
+    INTERFACE_INCLUDE_DIRECTORIES "${_cumm_inc}")
+endif()
+
