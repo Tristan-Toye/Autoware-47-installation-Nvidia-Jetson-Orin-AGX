@@ -1,0 +1,9 @@
+[Unit]
+Description=Enable Multicast on Loopback
+
+[Service]
+Type=oneshot
+ExecStart=${ip_bin} link set ${iface} multicast on
+
+[Install]
+WantedBy=multi-user.target
