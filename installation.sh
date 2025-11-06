@@ -2,6 +2,8 @@ set -x
 set -e 
 
 
+echo "imec" | ssh-add github-key
+
 add_line_if_missing() {
   local line="$1" file="$2"
   grep -qxF "$line" "$file" || printf '%s\n' "$line" >> "$file"
@@ -51,6 +53,9 @@ export SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 chmod +x setup-dev-env.sh
 chmod +x remove_agnocast.sh
 chmod +x setup_network.sh
+chmod +x setup_rqt.sh
+chmod +x install_CARET.sh
+
 
 sudo apt -y update
 sudo apt -y upgrade
@@ -107,7 +112,7 @@ else
 	sudo patch -N cuda_gl_interop.h $PWD'/patches/OpenGLHeader.patch' 
 	# Clean up the OpenGL tegra libs that usually get crushed
 	cd /usr/lib/aarch64-linux-gnu/
-	sudo ln -sf tegra/libGL.so libGL.so
+	sudo ln -s libGL.so.1 libGL.so
 
 
 	cd "${SCRIPT_DIR}/opencv"
@@ -462,7 +467,13 @@ else
 	add_line_if_missing 'source /opt/ros/humble/setup.bash' "$HOME/.bashrc"
 fi
 sudo rm -f /etc/apt/sources.list.d/ros-latest.list sudo rm -f /etc/apt/sources.list.d/ros2.list 
-#autoware installation
+
+
+# --------------- CARET ---------------
+
+./install_CARET.sh
+
+
 
 # --------------- Autoware repo ----------------------
 cd "${SCRIPT_DIR}"
@@ -576,7 +587,12 @@ echo "#########################################"
 
 ./remove_agnocast.sh
 ./setup_network.sh
+sudo ./setup_rqt.sh
 
-add_line_if_missing "source ~/autoware/install/setup.bash" "$HOME/.bashrc"
-add_line_if_missing "alias perf=/usr/lib/linux-nvidia-tegra-tools-5.15.0-1046/perf" "$HOME/.bashrc"
+
+add_line_if_missing "source ~/${SCRIPT_DIR}/autoware/install/setup.bash" "$HOME/.bashrc"
+add_line_if_missing "alias perf=/usr/lib/linux-nvidia-tegra-tools-5.15.0-1046/perf"
+ "$HOME/.bashrc"
+ 
+add_line_if_missing "source ~/ros2_caret_ws/install/local_setup.bash" "$HOME/.bashrc"
  
