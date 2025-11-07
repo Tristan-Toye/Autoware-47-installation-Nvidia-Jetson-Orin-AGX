@@ -431,7 +431,7 @@ echo "SPCONV installation succesfull!!"
 echo 
 echo
 # ------------------- ROS installation ---------------------------
-if [ -f /opt/ros/humble/setup.bash ]; then
+if [ -f "${SCRIPT_DIR}/ros2_humble/install/local_setup.bash" ]; then
 	echo "#########################################"
 	echo "#########################################"
     	echo "ROS 2 Humble is already installed. Skipping ROS installation."
@@ -452,24 +452,66 @@ else
 	sudo add-apt-repository universe -y
 
 	sudo apt update && sudo apt install curl -y
-	sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+	export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-	source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')
+	curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo ${UBUNTU_CODENAME:-${VERSION_CODENAME}})_all.deb"
+	sudo dpkg -i /tmp/ros2-apt-source.deb	
+	
+	
+	sudo apt update && sudo apt install -y \
+	  python3-flake8-docstrings \
+	  python3-pip \
+	  python3-pytest-cov \
+	  ros-dev-tools
+	
+	sudo apt install -y \
+	   python3-flake8-blind-except \
+	   python3-flake8-builtins \
+	   python3-flake8-class-newline \
+	   python3-flake8-comprehensions \
+	   python3-flake8-deprecated \
+	   python3-flake8-import-order \
+	   python3-flake8-quotes \
+	   python3-pytest-repeat \
+	   python3-pytest-rerunfailures
+	
+	mkdir -p "${SCRIPT_DIR}/ros2_humble/src"
+	cd "${SCRIPT_DIR}/ros2_humble"
+	vcs import --input https://raw.githubusercontent.com/ros2/ros2/humble/ros2.repos src
+	cd src/
+	git clone https://github.com/ros-tracing/tracetools_analysis.git -b humble
+	cd ..
+	
+	sudo apt upgrade -y
+	sudo rosdep init || true
+	rosdep update
+	rosdep install --from-paths src --ignore-src -y --skip-keys "fastcdr rti-connext-dds-6.0.1 urdfdom_headers"
 
-	echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
-
-	sudo apt update
-	sudo apt upgrade
-
-	sudo apt install ros-humble-desktop -y
-	sudo apt install ros-dev-tools -y
-	source /opt/ros/humble/setup.bash
+	sudo apt-get update
+	sudo apt-get install -y lttng-tools liblttng-ust-dev python3-lttng python3-babeltrace2 babeltrace2
+	
+	
+	colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo 
 
 	#echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc 
-	add_line_if_missing 'source /opt/ros/humble/setup.bash' "$HOME/.bashrc"
+	source "${SCRIPT_DIR}/ros2_humble/install/local_setup.bash"
+	if ! ros2 run tracetools status | grep -q "Tracing enabled"; then
+	  echo "[ERROR] ROS 2 tracing is not enabled. Re-check LTTng install and the overlay build." >&2
+	  exit 1
+	fi
+	
+	add_line_if_missing "source ${SCRIPT_DIR}/ros2_humble/install/local_setup.bash" "$HOME/.bashrc"
 fi
-sudo rm -f /etc/apt/sources.list.d/ros-latest.list sudo rm -f /etc/apt/sources.list.d/ros2.list 
+sudo rm -f /etc/apt/sources.list.d/ros-latest.list 
 
 
-# --------------- CARET ---------------
+# --------------- tracing & CARET ---------------
+
+
+sudo apt update
+sudo apt install -y lttng-tools liblttng-ust-dev python3-babeltrace2 babeltrace2
+sudo apt install -y ros-humble-ros2-tracing
+
+
 
 ./install_CARET.sh
 
