@@ -1,6 +1,7 @@
 # Ignore all directories (including nested git repos)
 */
 !profiled_nodes/
+!perf_commands_doc/
 
 # Ignore files with "flag" in the name
 *flag*
