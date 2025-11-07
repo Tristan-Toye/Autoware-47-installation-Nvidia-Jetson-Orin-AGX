@@ -514,7 +514,7 @@ sudo apt install -y ros-humble-ros2-tracing
 
 
 ./install_CARET.sh
-
+add_line_if_missing "source ~/ros2_caret_ws/install/local_setup.bash" "$HOME/.bashrc"
 
 
 # --------------- Autoware repo ----------------------
@@ -633,8 +633,13 @@ sudo ./setup_rqt.sh
 
 
 add_line_if_missing "source ~/${SCRIPT_DIR}/autoware/install/setup.bash" "$HOME/.bashrc"
-add_line_if_missing "alias perf=/usr/lib/linux-nvidia-tegra-tools-5.15.0-1046/perf"
+sudo apt install linux-tools-nvidia-tegra
+
+cd /usr/lib
+PERF_LOCATION="$(ls | grep 'linux-nvidia-tegra-tools')"
+
+add_line_if_missing "alias perf=/usr/lib/${PERF_LOCATION}/perf"
  "$HOME/.bashrc"
  
-add_line_if_missing "source ~/ros2_caret_ws/install/local_setup.bash" "$HOME/.bashrc"
+
  
