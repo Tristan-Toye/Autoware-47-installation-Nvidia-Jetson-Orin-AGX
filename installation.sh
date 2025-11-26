@@ -484,7 +484,7 @@ else
 	vcs import --input https://raw.githubusercontent.com/ros2/ros2/humble/ros2.repos src
 	cd src/
 	
-	git clone https://github.com/ros/diagnostics.git
+	git clone -b ros2-humble https://github.com/ros/diagnostics.git
 
 	if [ -d tracetools_analysis ]; then
 	    	echo "tracetools directory already exists. Skipping clone."
@@ -548,7 +548,7 @@ else
 	    	echo "Autoware directory already exists. Skipping clone."
 	else
 	  	git clone https://github.com/autowarefoundation/autoware.git
-	  	git checkout 1.5.0
+	  	# git checkout 1.5.0
 	fi
 	cp "${SCRIPT_DIR}/setup-dev-env.sh" "${SCRIPT_DIR}/autoware/setup-dev-env.sh"
 	cd "${SCRIPT_DIR}/autoware"
@@ -599,6 +599,10 @@ else
 	touch "${SCRIPT_DIR}/.ros_dependencies"
 fi 
 
+# --------------------- Fix autoware_lidar_centerpoint package.xml ----------------------
+cd "${SCRIPT_DIR}"
+chmod +x fix_lidar_centerpoint.sh
+./fix_lidar_centerpoint.sh
 
 # --------------------- CCache ----------------------
 sudo apt -y update && sudo apt -y install ccache

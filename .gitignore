@@ -6,3 +6,4 @@
 # Ignore files with "flag" in the name
 *flag*
 
+.ros_dependencies
