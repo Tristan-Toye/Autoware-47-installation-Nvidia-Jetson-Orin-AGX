@@ -484,7 +484,28 @@ else
 	vcs import --input https://raw.githubusercontent.com/ros2/ros2/humble/ros2.repos src
 	cd src/
 	
-	git clone -b ros2-humble https://github.com/ros/diagnostics.git
+	if [ -d diagnostics ]; then
+		echo "diagnostics directory already exists. Skipping clone."
+	else
+		git clone -b ros2-humble https://github.com/ros/diagnostics.git
+	fi
+
+	
+	if [ -d angles ]; then
+		echo "angles directory already exists. Skipping clone."
+	else
+		git clone -b ros2-humble https://github.com/ros/angles.git
+	fi
+
+	# Fix angles CMakeLists.txt for building from source
+	# See: https://github.com/ros/angles/issues/42
+	ANGLES_CMAKE="${SCRIPT_DIR}/ros2_humble/src/angles/angles/CMakeLists.txt"
+	if [ -f "${ANGLES_CMAKE}" ]; then
+		if grep -q 'INSTALL_INTERFACE:include/angles>' "${ANGLES_CMAKE}"; then
+			sed -i 's|"$<INSTALL_INTERFACE:include/angles>"|"$<INSTALL_INTERFACE:include>"|g' "${ANGLES_CMAKE}"
+			echo "✓ Fixed angles CMakeLists.txt for building from source"
+		fi
+	fi
 
 	if [ -d tracetools_analysis ]; then
 	    	echo "tracetools directory already exists. Skipping clone."
@@ -557,8 +578,6 @@ else
 	touch "${SCRIPT_DIR}/.autoware_setup_flag"
 fi
 
-source ~/.bashrc
-
 
 #----------------- ROS dependencies ---------------------------------
 #TODO: check if can be omitted
@@ -594,15 +613,17 @@ else
 		            ros-$ROS_DISTRO-grid-map-core \
 		            ros-$ROS_DISTRO-grid-map-ros \
 		            ros-$ROS_DISTRO-grid-map-msgs
+	
 	source /opt/ros/humble/setup.bash
 	add_line_if_missing "source /opt/ros/humble/setup.bash" "$HOME/.bashrc"
 	touch "${SCRIPT_DIR}/.ros_dependencies"
 fi 
 
-# --------------------- Fix autoware_lidar_centerpoint package.xml ----------------------
+# --------------------- Fix Autoware installation issues ----------------------
 cd "${SCRIPT_DIR}"
-chmod +x fix_lidar_centerpoint.sh
-./fix_lidar_centerpoint.sh
+chmod +x fix_autoware_installation.sh
+./fix_autoware_installation.sh
+
 
 # --------------------- CCache ----------------------
 sudo apt -y update && sudo apt -y install ccache
@@ -617,10 +638,34 @@ export CCACHE_DIR="$HOME/.cache/ccache/"
 # -------------------- Colcon Build ------------------------
 cd "${SCRIPT_DIR}/autoware"
 
+# Unsource CARET workspace if it was sourced from .bashrc
+# CARET should only be used for tracing, not during build
+# Remove ros2_caret_ws from all workspace paths to avoid conflicts
+if [ -n "$CMAKE_PREFIX_PATH" ]; then
+    export CMAKE_PREFIX_PATH=$(echo "$CMAKE_PREFIX_PATH" | tr ':' '\n' | grep -v "ros2_caret_ws" | tr '\n' ':' | sed 's/:$//')
+fi
+if [ -n "$AMENT_PREFIX_PATH" ]; then
+    export AMENT_PREFIX_PATH=$(echo "$AMENT_PREFIX_PATH" | tr ':' '\n' | grep -v "ros2_caret_ws" | tr '\n' ':' | sed 's/:$//')
+fi
+if [ -n "$ROS_PACKAGE_PATH" ]; then
+    export ROS_PACKAGE_PATH=$(echo "$ROS_PACKAGE_PATH" | tr ':' '\n' | grep -v "ros2_caret_ws" | tr '\n' ':' | sed 's/:$//')
+fi
+# Clear any CARET-specific environment that might interfere
+unset LD_PRELOAD
+
+
+
+# Source ros2_humble workspace first (most specific)
+source "${SCRIPT_DIR}/ros2_humble/install/local_setup.bash"
+# Then source system ROS 2
+source /opt/ros/humble/setup.bash
+
 # after: source /opt/ros/humble/setup.bash
 export CUDAToolkit_ROOT=/usr/local/cuda
 
-export CMAKE_PREFIX_PATH="$HOME/.local${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+
+# Add ros2_humble/install to CMAKE_PREFIX_PATH so CMake can find angles and other packages
+export CMAKE_PREFIX_PATH="${SCRIPT_DIR}/ros2_humble/install:$HOME/.local${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
 export spconv_DIR="$HOME/.local/lib/cmake/spconv"
 export cumm_DIR="$HOME/.local/share/cmake/cumm"   # or .../lib/cmake/cumm if that’s where yours installed
 
@@ -656,13 +701,59 @@ sudo ./setup_rqt.sh
 
 
 add_line_if_missing "source ${SCRIPT_DIR}/autoware/install/setup.bash" "$HOME/.bashrc"
-sudo apt install linux-tools-nvidia-tegra
 
-cd /usr/lib
-PERF_LOCATION="$(ls | grep 'linux-nvidia-tegra-tools')"
+# Install perf tools for Jetson
+# Try to find matching kernel tools package
+KERNEL_VERSION=$(uname -r)
+echo "Detected kernel version: ${KERNEL_VERSION}"
 
-add_line_if_missing "alias perf=/usr/lib/${PERF_LOCATION}/perf"
- "$HOME/.bashrc"
+# First, try installing the metapackage that should auto-select the right version
+if ! sudo apt install -y linux-tools-nvidia-tegra 2>/dev/null; then
+    echo "Failed to install linux-tools-nvidia-tegra, trying generic package..."
+    # Fallback: try to find the closest matching version
+    # Extract base version (e.g., 5.15.148 from 5.15.148-tegra)
+    BASE_VERSION=$(echo "${KERNEL_VERSION}" | cut -d'-' -f1)
+    # Try to find a matching package
+    MATCHING_PKG=$(apt-cache search linux-tools.*nvidia-tegra | grep -o "linux-tools-[0-9].*-nvidia-tegra" | head -n1)
+    if [ -n "${MATCHING_PKG}" ]; then
+        echo "Attempting to install ${MATCHING_PKG}..."
+        sudo apt install -y "${MATCHING_PKG}" || echo "Warning: Could not install matching perf tools package"
+    else
+        echo "Warning: No matching perf tools package found for kernel ${KERNEL_VERSION}"
+        echo "You may need to manually install perf tools for your specific kernel"
+    fi
+fi
+
+# Check if perf is available and create symlink for custom kernel versions if needed
+# Look for perf in both linux-tools and linux-nvidia-tegra-tools directories
+COMPATIBLE_PERF=$(find /usr/lib -name "perf" -type f 2>/dev/null | grep -E "linux.*tegra.*tools|linux-tools.*tegra" | grep "5.15" | head -n1)
+if [ -z "${COMPATIBLE_PERF}" ]; then
+    # Try alternative search pattern
+    COMPATIBLE_PERF=$(find /usr/lib -path "*tegra*" -name "perf" -type f 2>/dev/null | grep "5.15" | head -n1)
+fi
+
+if [ -n "${COMPATIBLE_PERF}" ] && [ ! -f "/usr/lib/linux-tools/${KERNEL_VERSION}/perf" ]; then
+    echo "Creating symlink for custom kernel ${KERNEL_VERSION} to compatible perf..."
+    echo "  Source: ${COMPATIBLE_PERF}"
+    sudo mkdir -p "/usr/lib/linux-tools/${KERNEL_VERSION}"
+    sudo ln -sf "${COMPATIBLE_PERF}" "/usr/lib/linux-tools/${KERNEL_VERSION}/perf"
+    echo "✓ Created symlink for perf compatibility"
+elif [ -z "${COMPATIBLE_PERF}" ]; then
+    echo "⚠ Warning: Could not find compatible perf binary for symlink creation"
+fi
+
+# Check if perf is available
+if command -v perf >/dev/null 2>&1; then
+    # Test if perf actually works (not just the wrapper)
+    if perf --version >/dev/null 2>&1; then
+        echo "✓ perf is available and working"
+    else
+        echo "✓ perf is available in PATH (may show kernel version warnings for custom kernels)"
+    fi
+else
+    echo "⚠ Warning: perf not found. You may need to install linux-tools-${KERNEL_VERSION} manually"
+fi
+cd "${SCRIPT_DIR}"
  
 
  

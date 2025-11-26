@@ -7,7 +7,13 @@ add_line_if_missing() {
 }
 export SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
-
+if [ -f "${SCRIPT_DIR}/.caret_built_flag" ] && [ -f /usr/local/lib/cmake/opencv4/OpenCVConfig.cmake ]; then
+	echo "#########################################"
+	echo "#########################################"
+    	echo "✅ CARET build flag found. Skipping build."
+    	echo "#########################################"
+	echo "#########################################"
+else
 
 
 if [ -d ros2_caret_ws ]; then
@@ -25,9 +31,10 @@ colcon build --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 
 
-source "${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash"
+# source "${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash"
 add_line_if_missing "source ${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash" "$HOME/.bashrc"
 add_line_if_missing "export LD_PRELOAD=${SCRIPT_DIR}/ros2_caret_ws/install/lib/libcaret.so" "$HOME/.bashrc"
 ros2 run tracetools status # return Tracing enabled
-exit 0
+touch "${SCRIPT_DIR}/.caret_built_flag"
 
+fi
