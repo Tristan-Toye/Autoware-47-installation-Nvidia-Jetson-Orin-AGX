@@ -2,7 +2,6 @@ set -x
 set -e 
 
 
-echo "imec" | ssh-add github-key
 
 add_line_if_missing() {
   local line="$1" file="$2"
@@ -60,7 +59,7 @@ chmod +x install_CARET.sh
 sudo apt -y update
 sudo apt -y upgrade
 
-sudo apt -y install apt-utils cmake ninja-build git
+sudo apt -y install apt-utils cmake ninja-build git python3-pytest
 
 export CUDAToolkit_ROOT=/usr/local/cuda
 #echo "export CUDAToolkit_ROOT=/usr/local/cuda" >> ~/.bashrc
@@ -112,7 +111,7 @@ else
 	sudo patch -N cuda_gl_interop.h $PWD'/patches/OpenGLHeader.patch' 
 	# Clean up the OpenGL tegra libs that usually get crushed
 	cd /usr/lib/aarch64-linux-gnu/
-	sudo ln -s libGL.so.1 libGL.so
+	# sudo ln -s libGL.so.1 libGL.so
 
 
 	cd "${SCRIPT_DIR}/opencv"
@@ -431,7 +430,7 @@ echo "SPCONV installation succesfull!!"
 echo 
 echo
 # ------------------- ROS installation ---------------------------
-if [ -f "${SCRIPT_DIR}/ros2_humble/install/local_setup.bash" ]; then
+if [ -f "${SCRIPT_DIR}/.ros_humble_flag" ]; then
 	echo "#########################################"
 	echo "#########################################"
     	echo "ROS 2 Humble is already installed. Skipping ROS installation."
@@ -452,9 +451,15 @@ else
 	sudo add-apt-repository universe -y
 
 	sudo apt update && sudo apt install curl -y
-	export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-	source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')
-	curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo ${UBUNTU_CODENAME:-${VERSION_CODENAME}})_all.deb"
-	sudo dpkg -i /tmp/ros2-apt-source.deb	
+	# Robust one-liner: fetches the right asset URL for your codename
+	ASSET_URL="$(curl -fsSL https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest \
+	  | grep -oE 'https://[^"]*ros2-apt-source_[^"]*'"$(
+	      . /etc/os-release; echo "${UBUNTU_CODENAME:-${VERSION_CODENAME}}"
+	    )"'_all\.deb')"
+
+	curl -fsSL -o /tmp/ros2-apt-source.deb "$ASSET_URL"
+	sudo dpkg -i /tmp/ros2-apt-source.deb
+
 	
 	
 	sudo apt update && sudo apt install -y \
@@ -478,7 +483,15 @@ else
 	cd "${SCRIPT_DIR}/ros2_humble"
 	vcs import --input https://raw.githubusercontent.com/ros2/ros2/humble/ros2.repos src
 	cd src/
-	git clone https://github.com/ros-tracing/tracetools_analysis.git -b humble
+	
+	git clone https://github.com/ros/diagnostics.git
+
+	if [ -d tracetools_analysis ]; then
+	    	echo "tracetools directory already exists. Skipping clone."
+	else
+	  	git clone https://github.com/ros-tracing/tracetools_analysis.git -b humble
+	fi
+	
 	cd ..
 	
 	sudo apt upgrade -y
@@ -487,10 +500,14 @@ else
 	rosdep install --from-paths src --ignore-src -y --skip-keys "fastcdr rti-connext-dds-6.0.1 urdfdom_headers"
 
 	sudo apt-get update
-	sudo apt-get install -y lttng-tools liblttng-ust-dev python3-lttng python3-babeltrace2 babeltrace2
+	sudo apt-get install -y lttng-tools liblttng-ust-dev python3-lttng babeltrace2
 	
 	
-	colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo 
+	colcon build --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release 
+	
+	cd "${SCRIPT_DIR}/ros2_humble"
+	rm -rf build
+	rm -rf log
 
 	#echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc 
 	source "${SCRIPT_DIR}/ros2_humble/install/local_setup.bash"
@@ -500,6 +517,7 @@ else
 	fi
 	
 	add_line_if_missing "source ${SCRIPT_DIR}/ros2_humble/install/local_setup.bash" "$HOME/.bashrc"
+	touch "${SCRIPT_DIR}/.ros_humble_flag"
 fi
 sudo rm -f /etc/apt/sources.list.d/ros-latest.list 
 
@@ -508,13 +526,11 @@ sudo rm -f /etc/apt/sources.list.d/ros-latest.list
 
 
 sudo apt update
-sudo apt install -y lttng-tools liblttng-ust-dev python3-babeltrace2 babeltrace2
-sudo apt install -y ros-humble-ros2-tracing
 
-
-
+echo "installing caret"
+cd "${SCRIPT_DIR}"
 ./install_CARET.sh
-add_line_if_missing "source ~/ros2_caret_ws/install/local_setup.bash" "$HOME/.bashrc"
+
 
 
 # --------------- Autoware repo ----------------------
@@ -532,6 +548,7 @@ else
 	    	echo "Autoware directory already exists. Skipping clone."
 	else
 	  	git clone https://github.com/autowarefoundation/autoware.git
+	  	git checkout 1.5.0
 	fi
 	cp "${SCRIPT_DIR}/setup-dev-env.sh" "${SCRIPT_DIR}/autoware/setup-dev-env.sh"
 	cd "${SCRIPT_DIR}/autoware"
@@ -544,7 +561,8 @@ source ~/.bashrc
 
 
 #----------------- ROS dependencies ---------------------------------
-source /opt/ros/humble/setup.bash
+#TODO: check if can be omitted
+# source /opt/ros/humble/setup.bash
 # Make sure all previously installed ros-$ROS_DISTRO-* packages are upgraded to their latest version
 sudo apt -y update 
 sudo apt -y upgrade
@@ -576,7 +594,8 @@ else
 		            ros-$ROS_DISTRO-grid-map-core \
 		            ros-$ROS_DISTRO-grid-map-ros \
 		            ros-$ROS_DISTRO-grid-map-msgs
-
+	source /opt/ros/humble/setup.bash
+	add_line_if_missing "source /opt/ros/humble/setup.bash" "$HOME/.bashrc"
 	touch "${SCRIPT_DIR}/.ros_dependencies"
 fi 
 
@@ -632,7 +651,7 @@ echo "#########################################"
 sudo ./setup_rqt.sh
 
 
-add_line_if_missing "source ~/${SCRIPT_DIR}/autoware/install/setup.bash" "$HOME/.bashrc"
+add_line_if_missing "source ${SCRIPT_DIR}/autoware/install/setup.bash" "$HOME/.bashrc"
 sudo apt install linux-tools-nvidia-tegra
 
 cd /usr/lib

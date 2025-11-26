@@ -20,11 +20,14 @@ cd ros2_caret_ws
 mkdir -p src
 vcs import src < caret.repos
 ./setup_caret.sh 
-source /opt/ros/humble/setup.bash
-colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+source "${SCRIPT_DIR}/ros2_humble/install/local_setup.bash"
+colcon build --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+
+
+
 source "${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash"
 add_line_if_missing "source ${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash" "$HOME/.bashrc"
-add_line_if_missing "export LD_PRELOAD=$(readlink -f ${SCRIPT_DIR}/ros2_caret_ws/install/caret_trace/lib/libcaret.so)" "$HOME/.bashrc"
+add_line_if_missing "export LD_PRELOAD=${SCRIPT_DIR}/ros2_caret_ws/install/lib/libcaret.so" "$HOME/.bashrc"
 ros2 run tracetools status # return Tracing enabled
-
+exit 0
 
