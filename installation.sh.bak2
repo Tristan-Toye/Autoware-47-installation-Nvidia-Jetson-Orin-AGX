@@ -723,19 +723,10 @@ else
 fi
 export spconv_DIR="$HOME/.local/lib/cmake/spconv"
 export cumm_DIR="$HOME/.local/share/cmake/cumm"   # or .../lib/cmake/cumm if that’s where yours installed
-
 # Ensure CARET's lib directory is in LD_LIBRARY_PATH for linker to find tracetools
 if [ -d "${SCRIPT_DIR}/ros2_caret_ws/install/lib" ]; then
 	if ! echo "$LD_LIBRARY_PATH" | grep -q "${SCRIPT_DIR}/ros2_caret_ws/install/lib"; then
-		export LD_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib:${LD_LIBRARY_PATH}"
-	fi
-fi
-
-
-# Ensure CARET's lib directory is in LD_LIBRARY_PATH for linker to find tracetools
-if [ -d "${SCRIPT_DIR}/ros2_caret_ws/install/lib" ]; then
-	if ! echo "$LD_LIBRARY_PATH" | grep -q "${SCRIPT_DIR}/ros2_caret_ws/install/lib"; then
-		export LD_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib:${LD_LIBRARY_PATH}"
+		export LD_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib:${LD_LIBRARY_PATH}
 	fi
 fi
 

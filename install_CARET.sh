@@ -5,6 +5,29 @@ add_line_if_missing() {
   local line="$1" file="$2"
   grep -qxF "$line" "$file" || printf '%s\n' "$line" >> "$file"
 }
+
+update_bashrc_sources() {
+  local bashrc="$HOME/.bashrc"
+  local start="# >>> Autoware env >>>"
+  local end="# <<< Autoware env <<<"
+  local tmp
+  tmp="$(mktemp)"
+  touch "$bashrc"
+  awk -v start="$start" -v end="$end" '
+    $0 == start {inblock=1; next}
+    $0 == end {inblock=0; next}
+    !inblock {print}
+  ' "$bashrc" > "$tmp"
+  cat <<EOF >> "$tmp"
+$start
+source /opt/ros/humble/setup.bash
+[ -f ${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash ] && source ${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash
+[ -f ${SCRIPT_DIR}/ros2_humble/install/local_setup.bash ] && source ${SCRIPT_DIR}/ros2_humble/install/local_setup.bash
+[ -f ${SCRIPT_DIR}/autoware/install/setup.bash ] && source ${SCRIPT_DIR}/autoware/install/setup.bash
+$end
+EOF
+  mv "$tmp" "$bashrc"
+}
 export SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 if [ -f "${SCRIPT_DIR}/.caret_built_flag" ] && [ -f /usr/local/lib/cmake/opencv4/OpenCVConfig.cmake ]; then
@@ -26,13 +49,17 @@ cd ros2_caret_ws
 mkdir -p src
 vcs import src < caret.repos
 ./setup_caret.sh 
-source "${SCRIPT_DIR}/ros2_humble/install/local_setup.bash"
+source /opt/ros/humble/setup.bash
+if [ -f "${SCRIPT_DIR}/ros2_humble/install/local_setup.bash" ]; then
+	# shellcheck disable=SC1090
+	source "${SCRIPT_DIR}/ros2_humble/install/local_setup.bash"
+fi
 colcon build --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 
 
-# source "${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash"
-add_line_if_missing "source ${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash" "$HOME/.bashrc"
+source "${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash"
+update_bashrc_sources
 add_line_if_missing "export LD_PRELOAD=${SCRIPT_DIR}/ros2_caret_ws/install/lib/libcaret.so" "$HOME/.bashrc"
 ros2 run tracetools status # return Tracing enabled
 touch "${SCRIPT_DIR}/.caret_built_flag"

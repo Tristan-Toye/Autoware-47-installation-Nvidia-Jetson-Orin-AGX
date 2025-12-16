@@ -13,6 +13,27 @@ This document provides comprehensive documentation for all nodes in the Autoware
 - [Sensing Nodes](#sensing-nodes)
 - [System Nodes](#system-nodes)
 - [Utility Nodes](#utility-nodes)
+- [CARET & Perf Automation](#caret--perf-automation)
+
+---
+
+## CARET & Perf Automation
+
+Helper scripts under `scripts/` orchestrate CARET tracing, perf collection, and visualization pipelines:
+
+- **Collect traces:** `scripts/run_caret_trace.sh --map /path/to/map --vehicle lexus --sensor aip_xx1 --runs 2 --duration 90 --session-prefix aw_trace --export-csv caretdb/node_metrics.csv`  
+  Launches `ros2 launch caret_autoware_launch autoware.launch.xml` with the configured arguments, records traces under `~/.ros/tracing/<session>`, and (optionally) appends per-callback metrics to a CSV by invoking `scripts/parse_caret_trace.py`.
+
+- **Parse traces to CSV:** `scripts/parse_caret_trace.py ~/.ros/tracing/aw_trace_* --output caretdb/node_metrics.csv --append --layer-map configs/layer_map.json`  
+  Uses `caret_analyze` to aggregate mean/min/max/std latency plus callback frequency per node. Provide an optional layer-map (JSON or CSV `substring,layer`) to label nodes for later plotting.
+
+- **Visualize CARET output:** `scripts/plot_latency_distribution.py caretdb/node_metrics.csv --group-by layer --metric mean_latency_ms --title "Layer latencies" --output plots/layer_latency.png`
+
+- **Run perf on a node (optional CARET counts):** `scripts/run_node_perf.sh --metric-group cache --runs 3 --enable-caret --session lidar_centerpoint_perf -- ros2 run autoware_lidar_centerpoint lidar_centerpoint_node_exe`  
+  Enforces ≤8 hardware counters, records raw `perf stat -x,` outputs under `perf_results/<session>/`, logs metadata (command, metrics, runs), and—when `--enable-caret` is passed—starts `ros2 caret record` to capture callback execution counts for the isolated node.
+
+- **Parse perf outputs & plot:** `scripts/parse_perf_results.py perf_results/lidar_centerpoint_perf --output perfdb/metrics.csv --plot plots/perf_bar.png --metric value`  
+  Reads every `perf_run_*.txt`, normalizes the CSV, and optionally renders a bar chart (mean metric per event) via matplotlib.
 
 ---
 
