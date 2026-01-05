@@ -43,9 +43,9 @@ update_bashrc_sources() {
   cat <<EOF >> "$tmp"
 $start
 source /opt/ros/humble/setup.bash
-[ -f ${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash ] && source ${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash
-[ -f ${SCRIPT_DIR}/ros2_humble/install/local_setup.bash ] && source ${SCRIPT_DIR}/ros2_humble/install/local_setup.bash
-[ -f ${SCRIPT_DIR}/autoware/install/setup.bash ] && source ${SCRIPT_DIR}/autoware/install/setup.bash
+source ${SCRIPT_DIR}/ros2_tracing/install/setup.bash
+source ${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash
+source ${SCRIPT_DIR}/autoware/install/setup.bash
 export LD_PRELOAD=${SCRIPT_DIR}/ros2_caret_ws/install/lib/libcaret.so"
 $end
 EOF
@@ -56,7 +56,7 @@ EOF
 source_autoware_build_env() {
   # shellcheck disable=SC1091
   source /opt/ros/humble/setup.bash
-  source "${SCRIPT_DIR}/ros2_humble/install/local_setup.bash"
+  source "${SCRIPT_DIR}/ros2_tracing/install/setup.bash"
   
   source "${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash"
   
@@ -494,35 +494,31 @@ if [ -f "${SCRIPT_DIR}/.ros_humble_flag" ]; then
 	echo "#########################################"
 else
 	echo "Installing ROS 2 Humble..."
-	locale  # check for UTF-8
 
+	locale  # check for UTF-8
 	sudo apt update && sudo apt install locales
 	sudo locale-gen en_US en_US.UTF-8
 	sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 	export LANG=en_US.UTF-8
-
 	locale  # verify settings
-
 	sudo apt install software-properties-common
-	sudo add-apt-repository universe -y
-
+	sudo add-apt-repository universe
 	sudo apt update && sudo apt install curl -y
-	# Robust one-liner: fetches the right asset URL for your codename
-	ASSET_URL="$(curl -fsSL https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest \
-	  | grep -oE 'https://[^"]*ros2-apt-source_[^"]*'"$(
-	      . /etc/os-release; echo "${UBUNTU_CODENAME:-${VERSION_CODENAME}}"
-	    )"'_all\.deb')"
-
-	curl -fsSL -o /tmp/ros2-apt-source.deb "$ASSET_URL"
+	export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')
+	curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo ${UBUNTU_CODENAME:-${VERSION_CODENAME}})_all.deb"
 	sudo dpkg -i /tmp/ros2-apt-source.deb
+	
+	
+	sudo apt update
+	sudo apt upgrade
 
-	
-	
+	sudo apt install ros-humble-desktop
 	sudo apt update && sudo apt install -y \
 	  python3-flake8-docstrings \
 	  python3-pip \
 	  python3-pytest-cov \
-	  ros-dev-tools
+	  ros-dev-tools \
+	  python3-colcon-common-extensions
 	
 	sudo apt install -y \
 	   python3-flake8-blind-except \
@@ -534,64 +530,18 @@ else
 	   python3-flake8-quotes \
 	   python3-pytest-repeat \
 	   python3-pytest-rerunfailures
-	
-	mkdir -p "${SCRIPT_DIR}/ros2_humble/src"
-	cd "${SCRIPT_DIR}/ros2_humble"
-	vcs import --input https://raw.githubusercontent.com/ros2/ros2/humble/ros2.repos src
-	cd src/
-	
-	if [ -d diagnostics ]; then
-		echo "diagnostics directory already exists. Skipping clone."
-	else
-		git clone -b ros2-humble https://github.com/ros/diagnostics.git
+
+	source /opt/ros/humble/setup.bash
+
+	sudo apt install lttng-tools liblttng-ust-dev python3-babeltrace python3-lttng
+	cd "${SCRIPT_DIR}"
+	if [ ! -d ros2_tracing ]; then
+		git clone https://gitlab.com/ros-tracing/ros2_tracing.git
 	fi
-
+	cd "${SCRIPT_DIR}/ros2_tracing"
+	colcon build --packages-up-to tracetools
+	colcon build --packages-up-to tracetools --allow-overriding tracetools
 	
-	if [ -d angles ]; then
-		echo "angles directory already exists. Skipping clone."
-	else
-		git clone -b ros2-humble https://github.com/ros/angles.git
-	fi
-
-	# Fix angles CMakeLists.txt for building from source
-	# See: https://github.com/ros/angles/issues/42
-	ANGLES_CMAKE="${SCRIPT_DIR}/ros2_humble/src/angles/angles/CMakeLists.txt"
-	if [ -f "${ANGLES_CMAKE}" ]; then
-		if grep -q 'INSTALL_INTERFACE:include/angles>' "${ANGLES_CMAKE}"; then
-			sed -i 's|"$<INSTALL_INTERFACE:include/angles>"|"$<INSTALL_INTERFACE:include>"|g' "${ANGLES_CMAKE}"
-			echo "✓ Fixed angles CMakeLists.txt for building from source"
-		fi
-	fi
-
-	if [ -d tracetools_analysis ]; then
-	    	echo "tracetools directory already exists. Skipping clone."
-	else
-	  	git clone https://github.com/ros-tracing/tracetools_analysis.git -b humble
-	fi
-	
-	cd ..
-	
-	sudo apt upgrade -y
-	sudo rosdep init || true
-	rosdep update
-	rosdep install --from-paths src --ignore-src -y --skip-keys "fastcdr rti-connext-dds-6.0.1 urdfdom_headers"
-
-	sudo apt-get update
-	sudo apt-get install -y lttng-tools liblttng-ust-dev python3-lttng babeltrace2
-	
-	
-	colcon build --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release 
-	
-	cd "${SCRIPT_DIR}/ros2_humble"
-	rm -rf build
-	rm -rf log
-
-	#echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc 
-	#source "${SCRIPT_DIR}/ros2_humble/install/local_setup.bash"
-	#if ! ros2 run tracetools status | grep -q "Tracing enabled"; then
-	#  echo "[ERROR] ROS 2 tracing is not enabled. Re-check LTTng install and the overlay build." >&2
-	#  exit 1
-	#fi
 	
 	touch "${SCRIPT_DIR}/.ros_humble_flag"
 fi
@@ -716,10 +666,30 @@ export CMAKE_PREFIX_PATH="$HOME/.local"
 
 source_autoware_build_env
 
+# CRITICAL: Reorder CMAKE_PREFIX_PATH to ensure CARET's tracetools is found FIRST by CMake
+# After sourcing, CMAKE_PREFIX_PATH may have /opt/ros/humble before CARET's install,
+# which causes find_package(tracetools) to find the system version (without CARET symbols).
+# We MUST put CARET's install directory FIRST so CMake finds the CARET-instrumented tracetools.
+CARET_INSTALL="${SCRIPT_DIR}/ros2_caret_ws/install"
+if [ -d "${CARET_INSTALL}" ]; then
+	# Extract CARET's path from CMAKE_PREFIX_PATH if present
+	CARET_PATH=$(echo "$CMAKE_PREFIX_PATH" | tr ':' '\n' | grep -F "${CARET_INSTALL}" | head -n1)
+	if [ -n "${CARET_PATH}" ]; then
+		# Remove CARET's path from CMAKE_PREFIX_PATH
+		CMAKE_PREFIX_PATH=$(echo "$CMAKE_PREFIX_PATH" | tr ':' '\n' | grep -vF "${CARET_INSTALL}" | paste -sd: -)
+		# Put CARET's path FIRST
+		export CMAKE_PREFIX_PATH="${CARET_PATH}:${CMAKE_PREFIX_PATH}"
+	else
+		# CARET path not found, add it first
+		export CMAKE_PREFIX_PATH="${CARET_INSTALL}:${CMAKE_PREFIX_PATH}"
+	fi
+fi
+
 # after: source /opt/ros/humble/setup.bash
 export CUDAToolkit_ROOT=/usr/local/cuda
 export spconv_DIR="$HOME/.local/lib/cmake/spconv"
-export cumm_DIR="$HOME/.local/share/cmake/cumm"   # or .../lib/cmake/cumm if that’s where yours installed
+export cumm_DIR="$HOME/.local/share/cmake/cumm"   # or .../lib/cmake/cumm if that's where yours installed
+
 
 if ! ros2 run tracetools status | grep -q "Tracing enabled"; then
 	  echo "[ERROR] ROS 2 tracing is not enabled. Re-check LTTng install and the overlay build." >&2
@@ -736,10 +706,16 @@ fi
 #
 # Order matters: CARET's paths MUST come BEFORE any system paths to avoid linking
 # against the system's libtracetools.so which lacks CARET-specific symbols.
-export LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib:${SCRIPT_DIR}/ros2_humble/install/tracetools/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
-export LD_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib:${SCRIPT_DIR}/ros2_humble/install/tracetools/lib:${LD_LIBRARY_PATH}"
-export CMAKE_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib:${SCRIPT_DIR}/ros2_humble/install/tracetools/lib${CMAKE_LIBRARY_PATH:+:${CMAKE_LIBRARY_PATH}}"
+export LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
+export LD_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib:${LD_LIBRARY_PATH}"
+export CMAKE_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib${CMAKE_LIBRARY_PATH:+:${CMAKE_LIBRARY_PATH}}"
 export LD_PRELOAD="${SCRIPT_DIR}/ros2_caret_ws/install/lib/libcaret.so"
+
+# Explicitly set tracetools_DIR to force CMake to use CARET's tracetools
+# This ensures find_package(tracetools) finds the CARET version even if CMAKE_PREFIX_PATH order fails
+if [ -f "${SCRIPT_DIR}/ros2_caret_ws/install/share/tracetools/cmake/tracetoolsConfig.cmake" ]; then
+	export tracetools_DIR="${SCRIPT_DIR}/ros2_caret_ws/install/share/tracetools/cmake"
+fi
 
 # Debug: show environment before build and write to file
 {
@@ -841,8 +817,18 @@ build_with_retry() {
 	echo "Building Autoware with CARET (continuing on errors)..."
 	echo "=========================================="
 	
+	# Build with explicit tracetools_DIR to ensure CARET's tracetools is used
+	CARET_TRACETOOLS_DIR="${SCRIPT_DIR}/ros2_caret_ws/install/share/tracetools/cmake"
+	CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF"
+	if [ -f "${CARET_TRACETOOLS_DIR}/tracetoolsConfig.cmake" ]; then
+		CMAKE_ARGS="${CMAKE_ARGS} -Dtracetools_DIR=${CARET_TRACETOOLS_DIR}"
+	else
+		echo "tracetoolsConfig.cmake not found in ${CARET_TRACETOOLS_DIR}"
+		return 1
+	fi
+	
 	colcon build --symlink-install --cmake-clean-cache \
-	  --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+	  --cmake-args ${CMAKE_ARGS} \
 	  --continue-on-error 2>&1 | tee "$build_log"
 	
 	local build_exit_code=${PIPESTATUS[0]}
@@ -875,10 +861,11 @@ build_with_retry() {
 		local packages_to_build=$(tr '\n' ' ' < "$failed_packages_file" | sed 's/ $//')
 		echo "Retrying packages: $packages_to_build"
 		
+		# Use same CMAKE_ARGS as initial build (includes tracetools_DIR if available)
 		colcon build --packages-select $packages_to_build \
 		  --symlink-install \
 		  --cmake-clean-cache \
-		  --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+		  --cmake-args ${CMAKE_ARGS} \
 		  2>&1 | tee -a "$build_log"
 		
 		local retry_exit_code=${PIPESTATUS[0]}

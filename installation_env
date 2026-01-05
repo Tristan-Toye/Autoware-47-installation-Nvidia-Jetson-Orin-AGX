@@ -1,0 +1,8 @@
+=== Build Environment ===
+CMAKE_PREFIX_PATH=/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/ros2_caret_ws/install:/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/ros2_tracing/install/tracetools:/home/tristan-toye/.local
+LD_LIBRARY_PATH=/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/ros2_caret_ws/install/lib:/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/ros2_caret_ws/install/lib:/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/ros2_tracing/install/tracetools/lib:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/aarch64-linux-gnu:/opt/ros/humble/lib:/usr/local/cuda-12.6/lib64:
+LIBRARY_PATH=/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/ros2_caret_ws/install/lib
+CMAKE_LIBRARY_PATH=/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/ros2_caret_ws/install/lib
+spconv_DIR=/home/tristan-toye/.local/lib/cmake/spconv
+cumm_DIR=/home/tristan-toye/.local/share/cmake/cumm
+=========================
