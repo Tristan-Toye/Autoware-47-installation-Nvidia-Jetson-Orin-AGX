@@ -1,31 +1,22 @@
 set -x
 set -e 
 
-
+# Cache sudo password at the start to avoid repeated prompts
+echo "Please enter your sudo password (will be cached for this session)..."
+sudo -v
+# Keep sudo alive by refreshing every 5 minutes in background
+# This is a standard pattern: background process that refreshes sudo and exits when parent dies
+(
+  set +x  # Disable verbose mode in subshell
+  while kill -0 "$$" 2>/dev/null; do
+    sudo -n true 2>/dev/null
+    sleep 300
+  done
+) >/dev/null 2>&1 &
 
 add_line_if_missing() {
   local line="$1" file="$2"
   grep -qxF "$line" "$file" || printf '%s\n' "$line" >> "$file"
-}
-
-clean_env_for_autoware_build() {
-  # Remove any existing Autoware overlay from the current shell environment.
-  # This script is often run from a shell that has already sourced
-  # ${SCRIPT_DIR}/autoware/install/setup.bash via ~/.bashrc, which pollutes
-  # CMAKE_PREFIX_PATH / AMENT_PREFIX_PATH and can cause CMake to resolve
-  # the wrong rclcpp (non‑CARET) for some packages.
-  local var val
-  for var in CMAKE_PREFIX_PATH AMENT_PREFIX_PATH ROS_PACKAGE_PATH LD_LIBRARY_PATH PATH; do
-    # shellcheck disable=SC2086
-    val=${!var-}
-    [ -z "$val" ] && continue
-    # Strip any entries under this repo's autoware/install
-    val=$(printf '%s\n' "$val" | tr ':' '\n' | grep -v "${SCRIPT_DIR}/autoware/install" | paste -sd: -)
-    # shellcheck disable=SC2163
-    export "$var=$val"
-  done
-  # CARET preload should not be active during build
-  unset LD_PRELOAD || true
 }
 
 update_bashrc_sources() {
@@ -50,16 +41,6 @@ export LD_PRELOAD=${SCRIPT_DIR}/ros2_caret_ws/install/lib/libcaret.so"
 $end
 EOF
   mv "$tmp" "$bashrc"
-}
-# export LD_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib:${LD_LIBRARY_PATH}
-
-source_autoware_build_env() {
-  # shellcheck disable=SC1091
-  source /opt/ros/humble/setup.bash
-  source "${SCRIPT_DIR}/ros2_tracing/install/setup.bash"
-  
-  source "${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash"
-  
 }
 rebuild_autoware=0
 rerun_autoware_setup=0
@@ -569,7 +550,9 @@ else
 		git checkout 1.5.0 || {
 			echo "Warning: Could not checkout tag 1.5.0. Current branch/commit:"
 			git describe --tags --always
+			exit 1
 		}
+		echo "Autoware 1.5.0 checked out successfully"
 		cd "${SCRIPT_DIR}"
 	else
 	  	git clone --branch 1.5.0 --tags https://github.com/autowarefoundation/autoware.git
@@ -651,274 +634,18 @@ export CCACHE_DIR="$HOME/.cache/ccache/"
 
 
 # -------------------- Colcon Build ------------------------
-cd "${SCRIPT_DIR}/autoware"
+# Temporarily disable set -x for build script to reduce verbose output
+{ set +x; } 2>/dev/null
+"${SCRIPT_DIR}/build_autoware.sh" "${SCRIPT_DIR}" "${rebuild_autoware}"
+set -x
 
-# Clean any Autoware overlay from the current shell environment so that CMake
-# sees a clean base (opt/ros + ros2_humble + CARET) instead of resolving
-# rclcpp / friends from a previously sourced autoware/install.
-# This is CRITICAL when building with --packages-up-to, because dependencies
-# are built first and must use CARET's rclcpp, not a previously built autoware rclcpp.
-clean_env_for_autoware_build
-
-# Reset CMAKE_PREFIX_PATH to just .local (from bashrc), then source in same order as working script
-# This ensures a clean environment that matches test_autoware_dummy_perception_publisher.sh
-export CMAKE_PREFIX_PATH="$HOME/.local"
-
-source_autoware_build_env
-
-# CRITICAL: Reorder CMAKE_PREFIX_PATH to ensure CARET's tracetools is found FIRST by CMake
-# After sourcing, CMAKE_PREFIX_PATH may have /opt/ros/humble before CARET's install,
-# which causes find_package(tracetools) to find the system version (without CARET symbols).
-# We MUST put CARET's install directory FIRST so CMake finds the CARET-instrumented tracetools.
-CARET_INSTALL="${SCRIPT_DIR}/ros2_caret_ws/install"
-if [ -d "${CARET_INSTALL}" ]; then
-	# Extract CARET's path from CMAKE_PREFIX_PATH if present
-	CARET_PATH=$(echo "$CMAKE_PREFIX_PATH" | tr ':' '\n' | grep -F "${CARET_INSTALL}" | head -n1)
-	if [ -n "${CARET_PATH}" ]; then
-		# Remove CARET's path from CMAKE_PREFIX_PATH
-		CMAKE_PREFIX_PATH=$(echo "$CMAKE_PREFIX_PATH" | tr ':' '\n' | grep -vF "${CARET_INSTALL}" | paste -sd: -)
-		# Put CARET's path FIRST
-		export CMAKE_PREFIX_PATH="${CARET_PATH}:${CMAKE_PREFIX_PATH}"
-	else
-		# CARET path not found, add it first
-		export CMAKE_PREFIX_PATH="${CARET_INSTALL}:${CMAKE_PREFIX_PATH}"
-	fi
-fi
-
-# after: source /opt/ros/humble/setup.bash
-export CUDAToolkit_ROOT=/usr/local/cuda
-export spconv_DIR="$HOME/.local/lib/cmake/spconv"
-export cumm_DIR="$HOME/.local/share/cmake/cumm"   # or .../lib/cmake/cumm if that's where yours installed
-
-
-if ! ros2 run tracetools status | grep -q "Tracing enabled"; then
-	  echo "[ERROR] ROS 2 tracing is not enabled. Re-check LTTng install and the overlay build." >&2
-	  exit 1
-fi
-
-# CRITICAL: Ensure CARET's tracetools library is found at LINK TIME, not the system version
-# The system /opt/ros/humble/lib/libtracetools.so exists but doesn't have CARET's symbols.
-# We MUST ensure CARET's version is found FIRST by the linker.
-# 
-# LIBRARY_PATH: Used by GCC/ld at LINK TIME to find libraries (MOST IMPORTANT for this fix)
-# LD_LIBRARY_PATH: Used by dynamic linker at RUNTIME to find libraries
-# CMAKE_LIBRARY_PATH: Used by CMake's find_library() to search for libraries
-#
-# Order matters: CARET's paths MUST come BEFORE any system paths to avoid linking
-# against the system's libtracetools.so which lacks CARET-specific symbols.
-export LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
-export LD_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib:${LD_LIBRARY_PATH}"
-export CMAKE_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib${CMAKE_LIBRARY_PATH:+:${CMAKE_LIBRARY_PATH}}"
+update_bashrc_sources
+# Source the Autoware environment directly (safer than sourcing .bashrc in a script)
+source /opt/ros/humble/setup.bash
+source "${SCRIPT_DIR}/ros2_tracing/install/setup.bash"
+source "${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash"
+source "${SCRIPT_DIR}/autoware/install/setup.bash"
 export LD_PRELOAD="${SCRIPT_DIR}/ros2_caret_ws/install/lib/libcaret.so"
-
-# Explicitly set tracetools_DIR to force CMake to use CARET's tracetools
-# This ensures find_package(tracetools) finds the CARET version even if CMAKE_PREFIX_PATH order fails
-if [ -f "${SCRIPT_DIR}/ros2_caret_ws/install/share/tracetools/cmake/tracetoolsConfig.cmake" ]; then
-	export tracetools_DIR="${SCRIPT_DIR}/ros2_caret_ws/install/share/tracetools/cmake"
-fi
-
-# Debug: show environment before build and write to file
-{
-	echo "=== Build Environment ==="
-	echo "CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH"
-	echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
-	echo "LIBRARY_PATH=$LIBRARY_PATH"
-	echo "CMAKE_LIBRARY_PATH=$CMAKE_LIBRARY_PATH"
-	echo "spconv_DIR=$spconv_DIR"
-	echo "cumm_DIR=$cumm_DIR"
-	echo "========================="
-} | tee "${SCRIPT_DIR}/installation_env"
-
-# Function to detect failed packages from colcon build output
-detect_failed_packages() {
-	local log_file="$1"
-	local failed_file="$2"
-	
-	# Extract the summary section from the log starting from "Summary:" line
-	# This ensures we get the complete summary even if the log is very long
-	local summary_section=""
-	if grep -q "^Summary:" "$log_file" 2>/dev/null; then
-		# Extract everything from the first "Summary:" line to the end of the file
-		summary_section=$(sed -n '/^Summary:/,$p' "$log_file" 2>/dev/null || echo "")
-		echo "Found Summary: in log file"
-	elif grep -q "Summary:" "$log_file" 2>/dev/null; then
-		# Fallback: extract from any line containing "Summary:" to the end
-		summary_section=$(sed -n '/Summary:/,$p' "$log_file" 2>/dev/null || echo "")
-		echo "Found summary with fallback method"
-	else
-		# Last resort: use last 100 lines if no "Summary:" found
-		summary_section=$(tail -100 "$log_file" 2>/dev/null || echo "")
-		echo "Summary not found, taking last 100 lines"
-	fi
-	
-	# Extract failed packages from colcon summary
-	# Colcon summary format: "  X packages failed: package1 package2 package3"
-	# First try the summary format
-	if echo "$summary_section" | grep -q "packages failed:"; then
-		# Extract the line with "packages failed:" and get all package names after the colon
-		echo "$summary_section" | grep "packages failed:" | \
-			sed 's/.*packages failed: *//' | \
-			tr ' ' '\n' | \
-			grep -v '^$' | \
-			sort -u > "$failed_file" || true
-	fi
-	
-	# Also check for "Failed <<<" format (individual package failures during build)
-	if [ -s "$failed_file" ]; then
-		# Merge with any "Failed <<<" entries
-		grep -E "Failed <<<" "$log_file" 2>/dev/null | \
-			sed 's/.*Failed <<< \([^ ]*\).*/\1/' | \
-			sort -u >> "$failed_file" || true
-	else
-		# If summary didn't work, try "Failed <<<" format
-		grep -E "Failed <<<" "$log_file" 2>/dev/null | \
-			sed 's/.*Failed <<< \([^ ]*\).*/\1/' | \
-			sort -u > "$failed_file" || true
-	fi
-	
-	# Also check colcon's result files if available (as backup)
-	if [ -d "log/latest_build" ]; then
-		find log/latest_build -name "stderr" -exec grep -l "error\|Error\|ERROR\|failed\|Failed" {} \; 2>/dev/null | \
-		while read -r stderr_file; do
-			# Extract package name from path: log/latest_build/package_name/stderr
-			package_name=$(basename "$(dirname "$stderr_file")")
-			echo "$package_name" >> "$failed_file"
-		done
-	fi
-	
-	# Remove duplicates and empty lines
-	sort -u "$failed_file" -o "$failed_file" 2>/dev/null || true
-	sed -i '/^$/d' "$failed_file" 2>/dev/null || true
-	
-	# Count failed packages
-	local failed_count=0
-	if [ -f "$failed_file" ]; then
-		failed_count=$(wc -l < "$failed_file" 2>/dev/null | tr -d ' ' || echo "0")
-	fi
-	
-	if [ "$failed_count" -gt 0 ]; then
-		echo "Detected $failed_count failed package(s)"
-		return 0
-	else
-		echo "No failed packages detected"
-		return 1
-	fi
-}
-
-# Function to build with error handling and retry
-build_with_retry() {
-	local build_log="${SCRIPT_DIR}/autoware_build.log"
-	local failed_packages_file="${SCRIPT_DIR}/failed_packages.txt"
-	local max_retries=3
-	local retry_count=0
-	
-	# Initial build with continue-on-error
-	echo "=========================================="
-	echo "Building Autoware with CARET (continuing on errors)..."
-	echo "=========================================="
-	
-	# Build with explicit tracetools_DIR to ensure CARET's tracetools is used
-	CARET_TRACETOOLS_DIR="${SCRIPT_DIR}/ros2_caret_ws/install/share/tracetools/cmake"
-	CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF"
-	if [ -f "${CARET_TRACETOOLS_DIR}/tracetoolsConfig.cmake" ]; then
-		CMAKE_ARGS="${CMAKE_ARGS} -Dtracetools_DIR=${CARET_TRACETOOLS_DIR}"
-	else
-		echo "tracetoolsConfig.cmake not found in ${CARET_TRACETOOLS_DIR}"
-		return 1
-	fi
-	
-	colcon build --symlink-install --cmake-clean-cache \
-	  --cmake-args ${CMAKE_ARGS} \
-	  --continue-on-error 2>&1 | tee "$build_log"
-	
-	local build_exit_code=${PIPESTATUS[0]}
-	
-	# Detect failed packages
-	rm -f "$failed_packages_file"
-	detect_failed_packages "$build_log" "$failed_packages_file"
-	
-	if [ ! -s "$failed_packages_file" ]; then
-		echo "✓ All packages built successfully!"
-		return 0
-	fi
-	
-	echo ""
-	echo "=========================================="
-	echo "Failed packages detected. Writing to: $failed_packages_file"
-	echo "=========================================="
-	cat "$failed_packages_file"
-	echo ""
-	
-	# Retry failed packages
-	while [ $retry_count -lt $max_retries ] && [ -s "$failed_packages_file" ]; do
-		retry_count=$((retry_count + 1))
-		echo ""
-		echo "=========================================="
-		echo "Retry attempt $retry_count of $max_retries for failed packages..."
-		echo "=========================================="
-		
-		# Build failed packages
-		local packages_to_build=$(tr '\n' ' ' < "$failed_packages_file" | sed 's/ $//')
-		echo "Retrying packages: $packages_to_build"
-		
-		# Use same CMAKE_ARGS as initial build (includes tracetools_DIR if available)
-		colcon build --packages-select $packages_to_build \
-		  --symlink-install \
-		  --cmake-clean-cache \
-		  --cmake-args ${CMAKE_ARGS} \
-		  2>&1 | tee -a "$build_log"
-		
-		local retry_exit_code=${PIPESTATUS[0]}
-		
-		# Update failed packages list
-		rm -f "$failed_packages_file"
-		detect_failed_packages "$build_log" "$failed_packages_file"
-		
-		if [ ! -s "$failed_packages_file" ]; then
-			echo "✓ All packages built successfully after retry!"
-			return 0
-		fi
-		
-		echo "Still have $(wc -l < "$failed_packages_file" | tr -d ' ') failed package(s)"
-	done
-	
-	# Final status
-	if [ -s "$failed_packages_file" ]; then
-		echo ""
-		echo "=========================================="
-		echo "⚠ WARNING: Some packages failed after $max_retries retries"
-		echo "Failed packages written to: $failed_packages_file"
-		echo "=========================================="
-		cat "$failed_packages_file"
-		return 1
-	else
-		echo "✓ All packages built successfully!"
-		return 0
-	fi
-}
-
-if (( rebuild_autoware )); then
-	echo "Cleaning build and install directories..."
-	rm -rf build install log
-	rm -f "${SCRIPT_DIR}/.autoware_build_flag"
-	rm -f "${SCRIPT_DIR}/failed_packages.txt"
-	rm -f "${SCRIPT_DIR}/autoware_build.log"
-	echo "✓ Cleaned build directories"
-	build_with_retry
-	touch "${SCRIPT_DIR}/.autoware_build_flag"
-elif [ ! -f "${SCRIPT_DIR}/.autoware_build_flag" ]; then
-	# Build if flag doesn't exist (first time build)
-	build_with_retry
-	touch "${SCRIPT_DIR}/.autoware_build_flag"
-else
-	echo "#########################################"
-	echo "#########################################"
-	echo "Autoware colcon build already ran. Skipping build."
-	echo "Use -b flag to force rebuild."
-	echo "#########################################"
-	echo "#########################################"
-fi
-
 
 
 echo ""
@@ -926,11 +653,21 @@ echo "=========================================="
 echo "✓ Build complete!"
 echo "=========================================="
 echo ""
+echo "Verifying ROS 2 tracing is enabled..."
+if ! ros2 run tracetools status | grep -q "Tracing enabled"; then
+	echo "[ERROR] ROS 2 tracing is not enabled. Re-check LTTng install and the overlay build." >&2
+	exit 1
+fi
+echo "✓ ROS 2 tracing is enabled"
+
+echo ""
 echo "Verifying CARET instrumentation..."
-ros2 caret check_caret_rclcpp ./
+cd "${SCRIPT_DIR}/autoware"
+ros2 caret check_caret_rclcpp . > "${SCRIPT_DIR}/autoware_nodes__build_with_caret.txt" 2>&1
+echo "CARET verification output saved to: ${SCRIPT_DIR}/autoware_nodes__build_with_caret.txt"
 
 
-update_bashrc_sources
+
 
 
 cd "${SCRIPT_DIR}"
