@@ -17,14 +17,14 @@ if [ -f "${SCRIPT_DIR}/.caret_built_flag" ] && [ -f /usr/local/lib/cmake/opencv4
 	echo "#########################################"
 else
 
-
-if [ -d ros2_caret_ws ]; then
+if [ -d "${SCRIPT_DIR}/ros2_caret_ws" ]; then
 	echo "CARET directory already exists. Skipping clone."
 else
+	cd "${SCRIPT_DIR}"
 	git clone https://github.com/tier4/caret.git ros2_caret_ws
 fi
 
-cd ros2_caret_ws
+cd "${SCRIPT_DIR}/ros2_caret_ws"
 mkdir -p src
 vcs import src < caret.repos
 ./setup_caret.sh 
