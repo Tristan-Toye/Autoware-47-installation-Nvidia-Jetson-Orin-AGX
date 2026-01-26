@@ -3,6 +3,8 @@
 !profiled_nodes/
 !perf_commands_doc/
 !autoware_dummy_perception_publisher/
+!autoware_dummy_perception_publisher/**
+!autoware_dummy_perception_publisher/**/
 
 # Ignore files with "flag" in the name
 *flag*
