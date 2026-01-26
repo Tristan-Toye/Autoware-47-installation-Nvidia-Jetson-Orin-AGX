@@ -19,6 +19,23 @@ add_line_if_missing() {
   grep -qxF "$line" "$file" || printf '%s\n' "$line" >> "$file"
 }
 
+remove_bashrc_sources() {
+  local bashrc="$HOME/.bashrc"
+  local start="# >>> Autoware env >>>"
+  local end="# <<< Autoware env <<<"
+  local tmp
+  tmp="$(mktemp)"
+  touch "$bashrc"
+  awk -v start="$start" -v end="$end" '
+    $0 == start {inblock=1; next}
+    $0 == end {inblock=0; next}
+    !inblock {print}
+  ' "$bashrc" > "$tmp"
+  mv "$tmp" "$bashrc"
+}
+
+remove_bashrc_sources
+
 update_bashrc_sources() {
   local bashrc="$HOME/.bashrc"
   local start="# >>> Autoware env >>>"
@@ -37,14 +54,15 @@ source /opt/ros/humble/setup.bash
 source ${SCRIPT_DIR}/ros2_tracing/install/setup.bash
 source ${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash
 source ${SCRIPT_DIR}/autoware/install/setup.bash
-export LD_PRELOAD=${SCRIPT_DIR}/ros2_caret_ws/install/lib/libcaret.so"
+export LD_PRELOAD=${SCRIPT_DIR}/ros2_caret_ws/install/lib/libcaret.so
 $end
 EOF
   mv "$tmp" "$bashrc"
 }
 rebuild_autoware=0
 rerun_autoware_setup=0
-
+rebuild_failed_packages=0
+verbose_link=0
 show_help() {
   cat <<'EOF'
 Positional arguments:
@@ -53,27 +71,32 @@ Positional arguments:
 Optional arguments:
   -s | setup    enable the force setup autoware run option: setup-dev-env.sh is guaranteed to run
   -b | build   enable the rebuild option: colcon build is guaranteed to run
+  -r | rebuild-failed   rebuild only packages listed in unable_to_build.txt
+  -d | debug-link   enable verbose link logging (CARET_VERBOSE_LINK=1)
   -h | help   show this help
   --    end of options; everything after is a positional argument
   
-Usage: ./script.sh [-s] [-b] [--] [args...]
+Usage: ./installation.sh [-s] [-b] [-r] [--] [args...]
   
 Examples:
-  ./script.sh -s
-  ./script.sh -sb            # same as -s -b
-  ./script.sh -bs -- file1   # flags + positional
+  ./installation.sh -s
+  ./installation.sh -sb            # same as -s -b
+  ./installation.sh -bs -- file1   # flags + positional
+  ./installation.sh -r             # rebuild only failed packages from unable_to_build.txt
 EOF
 }
-while getopts ":sbh" opt; do
+while getopts ":sbrdh" opt; do
    case "$opt" in
       s) rerun_autoware_setup=1 ;;
       b) rebuild_autoware=1;;
+      r) rebuild_failed_packages=1;;
+	  d) verbose_link=1;;
       h) show_help; exit 0;;
       \?) echo "Unknown option: -$OPTARG" >&2; show_help; exit 2 ;; 
    esac
 done
 
-
+export CARET_VERBOSE_LINK="${verbose_link}"
 sudo rm -f /etc/apt/sources.list.d/ros-latest.list
 sudo rm -f /etc/apt/sources.list.d/ros2.list
 
@@ -636,7 +659,48 @@ export CCACHE_DIR="$HOME/.cache/ccache/"
 # -------------------- Colcon Build ------------------------
 # Temporarily disable set -x for build script to reduce verbose output
 { set +x; } 2>/dev/null
-"${SCRIPT_DIR}/build_autoware.sh" "${SCRIPT_DIR}" "${rebuild_autoware}"
+
+run_build_autoware_clean() {
+	local rebuild_flag="$1"
+	local packages="$2"
+	# Use a clean shell so previous sourcing does not affect the build.
+	# Keep only minimal environment and source in the correct order.
+	env -i \
+		HOME="$HOME" \
+		USER="$USER" \
+		LOGNAME="$LOGNAME" \
+		PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+		SCRIPT_DIR="$SCRIPT_DIR" \
+		CARET_VERBOSE_LINK="$CARET_VERBOSE_LINK" \
+		bash -lc '
+			set -e
+			if [ -n "$1" ]; then
+				"${SCRIPT_DIR}/build_autoware.sh" "${SCRIPT_DIR}" "$0" "$1"
+			else
+				"${SCRIPT_DIR}/build_autoware.sh" "${SCRIPT_DIR}" "$0"
+			fi
+		' "${rebuild_flag}" "${packages}"
+}
+
+if [ "$rebuild_failed_packages" = "1" ]; then
+	# Read packages from unable_to_build.txt
+	unable_to_build_file="${SCRIPT_DIR}/unable_to_build.txt"
+	if [ ! -f "$unable_to_build_file" ]; then
+		echo "Error: unable_to_build.txt not found. Cannot rebuild failed packages." >&2
+		exit 1
+	fi
+	if [ ! -s "$unable_to_build_file" ]; then
+		echo "unable_to_build.txt is empty. No packages to rebuild." >&2
+		exit 0
+	fi
+	# Convert newline-separated list to space-separated
+	packages_to_rebuild=$(tr '\n' ' ' < "$unable_to_build_file" | sed 's/ $//')
+	echo "Rebuilding failed packages from unable_to_build.txt: $packages_to_rebuild"
+	run_build_autoware_clean "${rebuild_autoware}" "autoware_accel_brake_map_calibrator"
+else
+	run_build_autoware_clean "${rebuild_autoware}"
+fi
+exit 0
 set -x
 
 update_bashrc_sources
@@ -736,6 +800,9 @@ else
     echo "⚠ Warning: perf not found. You may need to install linux-tools-${KERNEL_VERSION} manually"
 fi
 cd "${SCRIPT_DIR}"
- 
 
+# Add commands.sh log directory setup to .bashrc (write absolute path)
+LOG_DIR="${SCRIPT_DIR}/logs"
+add_line_if_missing "LOG_DIR=\"${LOG_DIR}\"" "$HOME/.bashrc"
+mkdir -p ${LOG_DIR} 
  

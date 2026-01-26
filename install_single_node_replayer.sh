@@ -24,4 +24,4 @@ cd ros2_single_node_replayer
 cd "${SCRIPT_DIR}"
 # https://github.com/sykwer/ros2_single_node_replayer
 
-add_line_if_missing "alias single-node-replayer=python3 ${SCRIPT_DIR}/ros2_single_node_replayer/recorder.py" "$HOME/.bashrc"
+add_line_if_missing "alias single-node-replayer='python3 ${SCRIPT_DIR}/ros2_single_node_replayer/recorder.py'" "$HOME/.bashrc"

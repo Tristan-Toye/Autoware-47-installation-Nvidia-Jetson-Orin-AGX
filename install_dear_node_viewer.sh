@@ -11,7 +11,8 @@ export SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 if [ -d DearPyGui ]; then
 	echo "DearPyGui directory already exists. Skipping clone."
 else
-	git clone --recursive git@github.com:hoffstadt/DearPyGui.git
+	# Use HTTPS instead of SSH to avoid LTTng interference with SSH
+	git clone --recursive https://github.com/hoffstadt/DearPyGui.git
 fi
 cd DearPyGui
 git checkout v2.1.0

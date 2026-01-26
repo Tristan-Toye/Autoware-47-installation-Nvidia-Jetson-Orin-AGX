@@ -3,37 +3,21 @@ set -e
 set +x  # Disable verbose mode (set -x) to avoid excessive output
 
 # Build script for Autoware with CARET support
-# Usage: build_autoware.sh <SCRIPT_DIR> [rebuild_flag]
+# Usage: build_autoware.sh <SCRIPT_DIR> [rebuild_flag] [packages_to_build]
 #   SCRIPT_DIR: Base directory of the installation
 #   rebuild_flag: Optional, set to 1 to force rebuild
+#   packages_to_build: Optional, space-separated list of packages to build (uses --packages-select)
 
 SCRIPT_DIR="$1"
 REBUILD_FLAG="${2:-0}"
+PACKAGES_TO_BUILD="${3:-}"
+export SCRIPT_DIR="${SCRIPT_DIR}"
 
 if [ -z "$SCRIPT_DIR" ]; then
   echo "Error: SCRIPT_DIR argument is required"
   exit 1
 fi
 
-clean_env_for_autoware_build() {
-  # Remove any existing Autoware overlay from the current shell environment.
-  # This script is often run from a shell that has already sourced
-  # ${SCRIPT_DIR}/autoware/install/setup.bash via ~/.bashrc, which pollutes
-  # CMAKE_PREFIX_PATH / AMENT_PREFIX_PATH and can cause CMake to resolve
-  # the wrong rclcpp (non‑CARET) for some packages.
-  local var val
-  for var in CMAKE_PREFIX_PATH AMENT_PREFIX_PATH ROS_PACKAGE_PATH LD_LIBRARY_PATH PATH; do
-    # shellcheck disable=SC2086
-    val=${!var-}
-    [ -z "$val" ] && continue
-    # Strip any entries under this repo's autoware/install
-    val=$(printf '%s\n' "$val" | tr ':' '\n' | grep -v "${SCRIPT_DIR}/autoware/install" | paste -sd: -)
-    # shellcheck disable=SC2163
-    export "$var=$val"
-  done
-  # CARET preload should not be active during build
-  unset LD_PRELOAD || true
-}
 
 # Fix for CARET linking issue: https://github.com/tier4/caret/issues/69
 # This ensures ament_cmake_auto uses SYSTEM dependencies, which makes CMake prefer
@@ -102,12 +86,79 @@ apply_caret_ament_cmake_auto_fix() {
   fi
 }
 
+# Reverse fix for CARET linking issue: Remove SYSTEM keyword from ament_cmake_auto
+# This restores the original behavior where dependencies are not marked as SYSTEM.
+# The fix changes:
+#   ament_target_dependencies(${target} SYSTEM ${${PROJECT_NAME}_FOUND_BUILD_DEPENDS})
+# back to:
+#   ament_target_dependencies(${target} ${${PROJECT_NAME}_FOUND_BUILD_DEPENDS})
+remove_caret_ament_cmake_auto_fix() {
+  local ament_exec_file="/opt/ros/humble/share/ament_cmake_auto/cmake/ament_auto_add_executable.cmake"
+  local ament_lib_file="/opt/ros/humble/share/ament_cmake_auto/cmake/ament_auto_add_library.cmake"
+  local fix_applied=0
+  
+  # Check and fix ament_auto_add_executable.cmake
+  if [ -f "${ament_exec_file}" ]; then
+    # Check if SYSTEM keyword is present (fix is applied)
+    if grep -q "ament_target_dependencies(\${target} SYSTEM" "${ament_exec_file}"; then
+      echo "Removing SYSTEM keyword from ${ament_exec_file}..."
+      # Backup original file
+      sudo cp "${ament_exec_file}" "${ament_exec_file}.backup"
+      # Apply fix: remove SYSTEM keyword before ${${PROJECT_NAME}_FOUND_BUILD_DEPENDS}
+      # Match pattern with SYSTEM keyword (with one or two spaces after target)
+      sudo sed -i 's/ament_target_dependencies(${target} SYSTEM ${${PROJECT_NAME}_FOUND_BUILD_DEPENDS})/ament_target_dependencies(${target} ${${PROJECT_NAME}_FOUND_BUILD_DEPENDS})/g' "${ament_exec_file}"
+      # Verify the fix was applied
+      if ! grep -q "ament_target_dependencies(\${target} SYSTEM" "${ament_exec_file}"; then
+        echo "✓ SYSTEM keyword successfully removed from ${ament_exec_file}"
+        fix_applied=1
+      else
+        echo "⚠ Warning: SYSTEM keyword may not have been removed correctly from ${ament_exec_file}"
+      fi
+    else
+      echo "✓ No SYSTEM keyword found in ${ament_exec_file} (already removed or never applied)"
+    fi
+  else
+    echo "⚠ Warning: ${ament_exec_file} not found. Skipping fix."
+  fi
+  
+  # Check and fix ament_auto_add_library.cmake
+  if [ -f "${ament_lib_file}" ]; then
+    # Check if SYSTEM keyword is present (fix is applied)
+    if grep -q "ament_target_dependencies(\${target} SYSTEM" "${ament_lib_file}"; then
+      echo "Removing SYSTEM keyword from ${ament_lib_file}..."
+      # Backup original file
+      sudo cp "${ament_lib_file}" "${ament_lib_file}.backup"
+      # Apply fix: remove SYSTEM keyword before ${${PROJECT_NAME}_FOUND_BUILD_DEPENDS}
+      # Match pattern with SYSTEM keyword (with one or two spaces after target)
+      sudo sed -i 's/ament_target_dependencies(${target} SYSTEM ${${PROJECT_NAME}_FOUND_BUILD_DEPENDS})/ament_target_dependencies(${target} ${${PROJECT_NAME}_FOUND_BUILD_DEPENDS})/g' "${ament_lib_file}"
+      # Verify the fix was applied
+      if ! grep -q "ament_target_dependencies(\${target} SYSTEM" "${ament_lib_file}"; then
+        echo "✓ SYSTEM keyword successfully removed from ${ament_lib_file}"
+        fix_applied=1
+      else
+        echo "⚠ Warning: SYSTEM keyword may not have been removed correctly from ${ament_lib_file}"
+      fi
+    else
+      echo "✓ No SYSTEM keyword found in ${ament_lib_file} (already removed or never applied)"
+    fi
+  else
+    echo "⚠ Warning: ${ament_lib_file} not found. Skipping fix."
+  fi
+  
+  if [ $fix_applied -eq 1 ]; then
+    echo "✓ SYSTEM keyword removed from ament_cmake_auto files successfully"
+  fi
+}
+
 source_autoware_build_env() {
   # shellcheck disable=SC1091
   source /opt/ros/humble/setup.bash
-  source "${SCRIPT_DIR}/ros2_tracing/install/setup.bash"
-  
+  #source "${SCRIPT_DIR}/ros2_tracing/install/setup.bash"
+  echo $CMAKE_PREFIX_PATH
   source "${SCRIPT_DIR}/ros2_caret_ws/install/local_setup.bash"
+  echo $SCRIPT_DIR
+  echo $CMAKE_PREFIX_PATH
+  
 }
 
 # Function to detect failed packages from colcon build output
@@ -144,16 +195,16 @@ detect_failed_packages() {
 			sort -u > "$failed_file" || true
 	fi
 	
-	# Also check for "Failed <<<" format (individual package failures during build)
+	# Also check for "Failed   <<<" format (individual package failures during build)
 	if [ -s "$failed_file" ]; then
 		# Merge with any "Failed <<<" entries
-		grep -E "Failed <<<" "$log_file" 2>/dev/null | \
-			sed 's/.*Failed <<< \([^ ]*\).*/\1/' | \
+		grep -E "Failed[[:space:]]+<<<" "$log_file" 2>/dev/null | \
+			sed 's/.*Failed[[:space:]]\+<<< \([^ ]*\).*/\1/' | \
 			sort -u >> "$failed_file" || true
 	else
 		# If summary didn't work, try "Failed <<<" format
-		grep -E "Failed <<<" "$log_file" 2>/dev/null | \
-			sed 's/.*Failed <<< \([^ ]*\).*/\1/' | \
+		grep -E "Failed[[:space:]]+<<<" "$log_file" 2>/dev/null | \
+			sed 's/.*Failed[[:space:]]\+<<< \([^ ]*\).*/\1/' | \
 			sort -u > "$failed_file" || true
 	fi
 	
@@ -188,79 +239,44 @@ detect_failed_packages() {
 
 # Function to build with error handling and retry
 build_with_retry() {
+	local initial_packages="${1:-}"  # Optional: space-separated list of packages to build
 	local build_log="${SCRIPT_DIR}/autoware_build.log"
 	local failed_packages_file="${SCRIPT_DIR}/failed_packages.txt"
 	local max_retries=1  # Only one retry with same environment, then special retry without system libtracetools.so
 	local retry_count=0
 	
-	# Initial build with continue-on-error
-	echo "=========================================="
-	echo "Building Autoware with CARET (continuing on errors)..."
-	echo "=========================================="
-	
-	# Build with explicit tracetools_DIR to ensure CARET's tracetools is used
-	CARET_TRACETOOLS_DIR="${SCRIPT_DIR}/ros2_caret_ws/install/share/tracetools/cmake"
-	CARET_LIB_DIR="${SCRIPT_DIR}/ros2_caret_ws/install/lib"
-	CARET_INSTALL_DIR="${SCRIPT_DIR}/ros2_caret_ws/install"
-	CARET_TRACETOOLS_LIB="${CARET_LIB_DIR}/libtracetools.so"
-	
-	# Export CARET_TRACETOOLS_DIR for potential use by CMake modules
-	export CARET_TRACETOOLS_DIR="${CARET_TRACETOOLS_DIR}"
-	
-	CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF"
-	if [ -f "${CARET_TRACETOOLS_DIR}/tracetoolsConfig.cmake" ] && [ -f "${CARET_TRACETOOLS_LIB}" ]; then
-		# CRITICAL: Set tracetools_DIR to force CMake to ONLY use CARET's tracetools
-		# This should prevent CMake from finding /opt/ros/humble/lib/libtracetools.so
-		CMAKE_ARGS="${CMAKE_ARGS} -Dtracetools_DIR=${CARET_TRACETOOLS_DIR}"
-		
-		# CRITICAL: Explicitly tell CMake to use CARET's tracetools library file directly
-		# This bypasses find_library() and forces the linker to use CARET's version
-		# Note: tracetools_LIBRARY may not be recognized by all CMake packages, but it's worth trying
-		CMAKE_ARGS="${CMAKE_ARGS} -Dtracetools_LIBRARY=${CARET_TRACETOOLS_LIB}"
-		
-		# Add CARET's lib directory FIRST in CMAKE_LIBRARY_PATH to ensure linker finds CARET's tracetools FIRST
-		if [ -n "${CMAKE_LIBRARY_PATH}" ]; then
-			CMAKE_ARGS="${CMAKE_ARGS} -DCMAKE_LIBRARY_PATH=${CARET_LIB_DIR}:${CMAKE_LIBRARY_PATH}"
-		else
-			CMAKE_ARGS="${CMAKE_ARGS} -DCMAKE_LIBRARY_PATH=${CARET_LIB_DIR}"
-		fi
-		
-		# CRITICAL: Use CMAKE_FIND_ROOT_PATH to prioritize CARET's install directory
-		# This ensures find_package(tracetools) finds CARET's version first
-		# BOTH mode allows fallback to system packages if not found in CARET
-		CMAKE_ARGS="${CMAKE_ARGS} -DCMAKE_FIND_ROOT_PATH=${CARET_INSTALL_DIR}"
-		CMAKE_ARGS="${CMAKE_ARGS} -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH"
-		CMAKE_ARGS="${CMAKE_ARGS} -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH"
-		
-		# CRITICAL: Remove /opt/ros/humble from CMAKE_PREFIX_PATH temporarily to prevent
-		# CMake from finding the system tracetools. We'll add it back after tracetools is found.
-		# Actually, this is complex and might break other packages. Instead, we rely on
-		# tracetools_DIR being set, which should make CMake use CARET's version.
-		
-		# Note: We rely on LIBRARY_PATH, LD_LIBRARY_PATH, and CMAKE_LIBRARY_PATH environment variables
-		# (set above) to ensure the linker finds CARET's tracetools first.
-		# Explicit linker flags cause quoting issues with colcon, so we avoid them here.
-		
-		echo "Using CARET's tracetools: ${CARET_TRACETOOLS_LIB}"
-		echo "tracetools_DIR set to: ${CARET_TRACETOOLS_DIR}"
+	# Build colcon arguments based on whether packages are specified
+	local colcon_packages_args=""
+	if [ -n "$initial_packages" ]; then
+		colcon_packages_args="--packages-select $initial_packages"
+		echo "=========================================="
+		echo "Building selected packages with CARET: $initial_packages"
+		echo "=========================================="
 	else
-		if [ ! -f "${CARET_TRACETOOLS_DIR}/tracetoolsConfig.cmake" ]; then
-			echo "tracetoolsConfig.cmake not found in ${CARET_TRACETOOLS_DIR}"
-		fi
-		if [ ! -f "${CARET_TRACETOOLS_LIB}" ]; then
-			echo "libtracetools.so not found in ${CARET_LIB_DIR}"
-		fi
-		return 1
+		echo "=========================================="
+		echo "Building Autoware with CARET (continuing on errors)..."
+		echo "=========================================="
+	fi
+	
+	# build_autoware_addition.sh
+	CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF"
+	if [ "${CARET_VERBOSE_LINK:-0}" = "1" ]; then
+		CMAKE_ARGS="${CMAKE_ARGS} -DCMAKE_VERBOSE_MAKEFILE=ON"
+		echo "Verbose link logging enabled (CARET_VERBOSE_LINK=1)"
 	fi
 
 	# Log the exact CMake arguments used for the build into the same env log file
 	{
 		echo "=== CMake Arguments (initial build) ==="
 		echo "CMAKE_ARGS=${CMAKE_ARGS}"
+		if [ -n "$initial_packages" ]; then
+			echo "Packages: $initial_packages"
+		fi
 		echo "======================================="
 	} | tee -a "${SCRIPT_DIR}/installation_env"
 	
 	colcon build --symlink-install --cmake-clean-cache \
+	  ${colcon_packages_args} \
 	  --cmake-args ${CMAKE_ARGS} \
 	  --continue-on-error 2>&1 | tee "$build_log"
 	
@@ -281,7 +297,7 @@ build_with_retry() {
 	echo "=========================================="
 	cat "$failed_packages_file"
 	echo ""
-	
+	exit 0
 	# Retry failed packages
 	while [ $retry_count -lt $max_retries ] && [ -s "$failed_packages_file" ]; do
 		retry_count=$((retry_count + 1))
@@ -338,8 +354,11 @@ build_with_retry() {
 		# Temporarily rename system libtracetools.so to prevent linker from finding it
 		if [ -f "$system_tracetools" ]; then
 			echo "Temporarily renaming system libtracetools.so to prevent linker conflicts..."
-			sudo mv "$system_tracetools" "$system_tracetools_backup"
-			system_tracetools_removed=1
+			if sudo -n mv "$system_tracetools" "$system_tracetools_backup"; then
+				system_tracetools_removed=1
+			else
+				echo "WARNING: sudo not available non-interactively; skipping system libtracetools removal"
+			fi
 		fi
 		
 		# Build failed packages with CARET (system libtracetools.so is now unavailable)
@@ -366,7 +385,7 @@ build_with_retry() {
 		# Restore system libtracetools.so
 		if [ $system_tracetools_removed -eq 1 ] && [ -f "$system_tracetools_backup" ]; then
 			echo "Restoring system libtracetools.so..."
-			sudo mv "$system_tracetools_backup" "$system_tracetools"
+			sudo -n mv "$system_tracetools_backup" "$system_tracetools" || true
 		fi
 		
 		# Update failed packages list
@@ -515,43 +534,82 @@ build_with_retry() {
 
 # -------------------- Colcon Build ------------------------
 cd "${SCRIPT_DIR}/autoware"
+echo "########################################################"
+echo "CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
+export CMAKE_PREFIX_PATH="/home/tristan-toye/.local:$CMAKE_PREFIX_PATH"
+echo "########################################################"
+echo "CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
+echo "########################################################"
 
 # CRITICAL: Apply CARET ament_cmake_auto fix before building
 # This ensures CMake prefers CARET's instrumented libraries over system ROS 2 libraries
 # See: https://github.com/tier4/caret/issues/69
-apply_caret_ament_cmake_auto_fix
+# apply_caret_ament_cmake_auto_fix
+remove_caret_ament_cmake_auto_fix
+
+# Copy autoware_dummy_perception_publisher folder to replace existing one
+# This ensures the modified component-based version is used during build
+# Source directory can be set via AUTOWARE_DUMMY_PUBLISHER_SOURCE env variable
+# If not set, uses the current location (assumes modifications are already in place)
+copy_autoware_dummy_perception_publisher() {
+	local source_dir="${SCRIPT_DIR}/autoware_dummy_perception_publisher"
+	local target_dir="${SCRIPT_DIR}/autoware/src/universe/autoware_universe/simulator/autoware_dummy_perception_publisher"
+	
+	
+	# Copy from source to target
+	if [ -d "$source_dir" ]; then
+		echo "Copying autoware_dummy_perception_publisher to target location..."
+		# Remove existing target if it exists
+		if [ -d "$target_dir" ]; then
+			echo "  Removing existing folder: $target_dir"
+			rm -rf "$target_dir"
+		fi
+		# Copy the folder
+		echo "  Copying from: $source_dir"
+		echo "  To: $target_dir"
+		cp -r "$source_dir" "$target_dir"
+		echo "✓ autoware_dummy_perception_publisher folder copied successfully"
+	else
+		echo "⚠ Warning: Source directory not found: $source_dir"
+		echo "  Skipping copy operation"
+	fi
+}
+
+# Copy the modified autoware_dummy_perception_publisher folder
+copy_autoware_dummy_perception_publisher
 
 # Clean any Autoware overlay from the current shell environment so that CMake
 # sees a clean base (opt/ros + ros2_humble + CARET) instead of resolving
 # rclcpp / friends from a previously sourced autoware/install.
 # This is CRITICAL when building with --packages-up-to, because dependencies
 # are built first and must use CARET's rclcpp, not a previously built autoware rclcpp.
-clean_env_for_autoware_build
+#clean_env_for_autoware_build
 
 # Reset CMAKE_PREFIX_PATH to just .local (from bashrc), then source in same order as working script
 # This ensures a clean environment that matches test_autoware_dummy_perception_publisher.sh
-export CMAKE_PREFIX_PATH="$HOME/.local"
+# export CMAKE_PREFIX_PATH="$HOME/.local"
 
 source_autoware_build_env
 
-# CRITICAL: Reorder CMAKE_PREFIX_PATH to ensure CARET's tracetools is found FIRST by CMake
-# After sourcing, CMAKE_PREFIX_PATH may have /opt/ros/humble before CARET's install,
-# which causes find_package(tracetools) to find the system version (without CARET symbols).
-# We MUST put CARET's install directory FIRST so CMake finds the CARET-instrumented tracetools.
-CARET_INSTALL="${SCRIPT_DIR}/ros2_caret_ws/install"
-if [ -d "${CARET_INSTALL}" ]; then
-	# Extract CARET's path from CMAKE_PREFIX_PATH if present
-	CARET_PATH=$(echo "$CMAKE_PREFIX_PATH" | tr ':' '\n' | grep -F "${CARET_INSTALL}" | head -n1)
-	if [ -n "${CARET_PATH}" ]; then
-		# Remove CARET's path from CMAKE_PREFIX_PATH
-		CMAKE_PREFIX_PATH=$(echo "$CMAKE_PREFIX_PATH" | tr ':' '\n' | grep -vF "${CARET_INSTALL}" | paste -sd: -)
-		# Put CARET's path FIRST
-		export CMAKE_PREFIX_PATH="${CARET_PATH}:${CMAKE_PREFIX_PATH}"
-	else
-		# CARET path not found, add it first
-		export CMAKE_PREFIX_PATH="${CARET_INSTALL}:${CMAKE_PREFIX_PATH}"
-	fi
-fi
+# CRITICAL: Reorder CMAKE_PREFIX_PATH and AMENT_PREFIX_PATH so CARET is FIRST.
+# This prevents CMake from resolving rclcpp/tracetools from /opt/ros/humble.
+
+# CARET_INSTALL="${SCRIPT_DIR}/ros2_caret_ws/install"
+# prepend_prefix_path() {
+# 	local var_name="$1"
+# 	local prefix="$2"
+# 	local current="${!var_name-}"
+# 	if [ -z "$current" ]; then
+# 		export "$var_name=$prefix"
+# 		return
+# 	fi
+# 	current=$(echo "$current" | tr ':' '\n' | grep -vF "$prefix" | paste -sd: -)
+# 	export "$var_name=$prefix:$current"
+# }
+# if [ -d "${CARET_INSTALL}" ]; then
+# 	prepend_prefix_path "CMAKE_PREFIX_PATH" "${CARET_INSTALL}"
+# 	prepend_prefix_path "AMENT_PREFIX_PATH" "${CARET_INSTALL}"
+# fi
 
 # after: source /opt/ros/humble/setup.bash
 export CUDAToolkit_ROOT=/usr/local/cuda
@@ -574,16 +632,28 @@ fi
 #
 # Order matters: CARET's paths MUST come BEFORE any system paths to avoid linking
 # against the system's libtracetools.so which lacks CARET-specific symbols.
-export LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
-export LD_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib:${LD_LIBRARY_PATH}"
-export CMAKE_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib${CMAKE_LIBRARY_PATH:+:${CMAKE_LIBRARY_PATH}}"
-export LDFLAGS="-L${SCRIPT_DIR}/ros2_caret_ws/install/lib"
-export LD_PRELOAD="${SCRIPT_DIR}/ros2_caret_ws/install/lib/libcaret.so"
+# export LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
+#export LD_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib:${LD_LIBRARY_PATH}"
+#export CMAKE_LIBRARY_PATH="${SCRIPT_DIR}/ros2_caret_ws/install/lib${CMAKE_LIBRARY_PATH:+:${CMAKE_LIBRARY_PATH}}"
+# export LDFLAGS="-L${SCRIPT_DIR}/ros2_caret_ws/install/lib"
+#export LD_PRELOAD="${SCRIPT_DIR}/ros2_caret_ws/install/lib/libcaret.so"
 
 # Explicitly set tracetools_DIR to force CMake to use CARET's tracetools
 # This ensures find_package(tracetools) finds the CARET version even if CMAKE_PREFIX_PATH order fails
 if [ -f "${SCRIPT_DIR}/ros2_caret_ws/install/share/tracetools/cmake/tracetoolsConfig.cmake" ]; then
 	export tracetools_DIR="${SCRIPT_DIR}/ros2_caret_ws/install/share/tracetools/cmake"
+	:
+fi
+
+# Explicitly set rclcpp_DIR and rclcpp_components_DIR to force CARET's rclcpp
+# This prevents CMake from resolving system /opt/ros/humble rclcpp first.
+if [ -f "${SCRIPT_DIR}/ros2_caret_ws/install/share/rclcpp/cmake/rclcppConfig.cmake" ]; then
+	export rclcpp_DIR="${SCRIPT_DIR}/ros2_caret_ws/install/share/rclcpp/cmake"
+	:
+fi
+if [ -f "${SCRIPT_DIR}/ros2_caret_ws/install/share/rclcpp_components/cmake/rclcpp_componentsConfig.cmake" ]; then
+	export rclcpp_components_DIR="${SCRIPT_DIR}/ros2_caret_ws/install/share/rclcpp_components/cmake"
+	:
 fi
 
 # Debug: show environment before build and write to file
@@ -596,6 +666,8 @@ fi
 	echo "LDFLAGS=$LDFLAGS"
 	echo "LD_PRELOAD=$LD_PRELOAD"
 	echo "tracetools_DIR=$tracetools_DIR"
+	echo "rclcpp_DIR=$rclcpp_DIR"
+	echo "rclcpp_components_DIR=$rclcpp_components_DIR"
 	echo "spconv_DIR=$spconv_DIR"
 	echo "cumm_DIR=$cumm_DIR"
 	echo "========================="
@@ -609,17 +681,22 @@ if [ "$REBUILD_FLAG" = "1" ]; then
 	rm -f "${SCRIPT_DIR}/failed_packages.txt"
 	rm -f "${SCRIPT_DIR}/autoware_build.log"
 	echo "✓ Cleaned build directories"
-	build_with_retry
+	build_with_retry 
 	touch "${SCRIPT_DIR}/.autoware_build_flag"
 elif [ ! -f "${SCRIPT_DIR}/.autoware_build_flag" ]; then
 	# Build if flag doesn't exist (first time build)
-	build_with_retry
+	build_with_retry 
 	touch "${SCRIPT_DIR}/.autoware_build_flag"
+elif [ -n "$PACKAGES_TO_BUILD" ]; then
+	# If packages are specified, build them even if build flag exists
+	echo "Building specified packages: $PACKAGES_TO_BUILD"
+	build_with_retry "$PACKAGES_TO_BUILD"
 else
 	echo "#########################################"
 	echo "#########################################"
 	echo "Autoware colcon build already ran. Skipping build."
 	echo "Use -b flag to force rebuild."
+	echo "Use -r flag to rebuild failed packages from unable_to_build.txt"
 	echo "#########################################"
 	echo "#########################################"
 fi
