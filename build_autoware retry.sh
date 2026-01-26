@@ -298,8 +298,238 @@ build_with_retry() {
 	cat "$failed_packages_file"
 	echo ""
 	exit 0
+	# Retry failed packages
+	while [ $retry_count -lt $max_retries ] && [ -s "$failed_packages_file" ]; do
+		retry_count=$((retry_count + 1))
+		echo ""
+		echo "=========================================="
+		echo "Retry attempt $retry_count of $max_retries for failed packages..."
+		echo "=========================================="
+		
+		# Build failed packages
+		local packages_to_build=$(tr '\n' ' ' < "$failed_packages_file" | sed 's/ $//')
+		echo "Retrying packages: $packages_to_build"
 
-
+		# Log the CMake arguments for this retry into the env log as well
+		{
+			echo "=== CMake Arguments (retry $retry_count) ==="
+			echo "Packages: $packages_to_build"
+			echo "CMAKE_ARGS=${CMAKE_ARGS}"
+			echo "==========================================="
+		} | tee -a "${SCRIPT_DIR}/installation_env"
+		
+		# Use same CMAKE_ARGS as initial build (includes tracetools_DIR if available)
+		colcon build --packages-select $packages_to_build \
+		  --symlink-install \
+		  --cmake-clean-cache \
+		  --cmake-args ${CMAKE_ARGS} \
+		  2>&1 | tee -a "$build_log"
+		
+		local retry_exit_code=${PIPESTATUS[0]}
+		
+		# Update failed packages list
+		rm -f "$failed_packages_file"
+		detect_failed_packages "$build_log" "$failed_packages_file"
+		
+		if [ ! -s "$failed_packages_file" ]; then
+			echo "✓ All packages built successfully after retry!"
+			return 0
+		fi
+		
+		echo "Still have $(wc -l < "$failed_packages_file" | tr -d ' ') failed package(s)"
+	done
+	
+	# Special retry: Build with CARET but remove system libtracetools.so so only CARET's version is available
+	if [ -s "$failed_packages_file" ]; then
+		echo ""
+		echo "=========================================="
+		echo "Retry with CARET but removing system libtracetools.so..."
+		echo "This ensures only CARET's libtracetools.so is available to the linker"
+		echo "=========================================="
+		
+		local system_tracetools="/opt/ros/humble/lib/libtracetools.so"
+		local system_tracetools_backup="/opt/ros/humble/lib/libtracetools.so.backup"
+		local system_tracetools_removed=0
+		
+		# Temporarily rename system libtracetools.so to prevent linker from finding it
+		if [ -f "$system_tracetools" ]; then
+			echo "Temporarily renaming system libtracetools.so to prevent linker conflicts..."
+			if sudo -n mv "$system_tracetools" "$system_tracetools_backup"; then
+				system_tracetools_removed=1
+			else
+				echo "WARNING: sudo not available non-interactively; skipping system libtracetools removal"
+			fi
+		fi
+		
+		# Build failed packages with CARET (system libtracetools.so is now unavailable)
+		local packages_to_build=$(tr '\n' ' ' < "$failed_packages_file" | sed 's/ $//')
+		echo "Retrying packages with CARET (system libtracetools.so removed): $packages_to_build"
+		
+		# Log to installation_env
+		{
+			echo "=== Retry with CARET (system libtracetools.so removed) ==="
+			echo "Packages: $packages_to_build"
+			echo "CMAKE_ARGS=${CMAKE_ARGS}"
+			echo "System libtracetools.so: ${system_tracetools} (temporarily renamed)"
+			echo "============================================================"
+		} | tee -a "${SCRIPT_DIR}/installation_env"
+		
+		colcon build --packages-select $packages_to_build \
+		  --symlink-install \
+		  --cmake-clean-cache \
+		  --cmake-args ${CMAKE_ARGS} \
+		  2>&1 | tee -a "$build_log"
+		
+		local retry_without_system_tracetools_exit_code=${PIPESTATUS[0]}
+		
+		# Restore system libtracetools.so
+		if [ $system_tracetools_removed -eq 1 ] && [ -f "$system_tracetools_backup" ]; then
+			echo "Restoring system libtracetools.so..."
+			sudo -n mv "$system_tracetools_backup" "$system_tracetools" || true
+		fi
+		
+		# Update failed packages list
+		rm -f "$failed_packages_file"
+		detect_failed_packages "$build_log" "$failed_packages_file"
+		
+		if [ ! -s "$failed_packages_file" ]; then
+			echo "✓ All packages built successfully after retry with system libtracetools.so removed!"
+			return 0
+		fi
+		
+		echo "Still have $(wc -l < "$failed_packages_file" | tr -d ' ') failed package(s) after removing system libtracetools.so"
+	fi
+	
+	# Final status - if packages still failed, try building without CARET
+	if [ -s "$failed_packages_file" ]; then
+		echo ""
+		echo "=========================================="
+		echo "⚠ WARNING: Some packages failed after all CARET retries"
+		echo "Failed packages written to: $failed_packages_file"
+		echo "=========================================="
+		cat "$failed_packages_file"
+		
+		# Copy failed packages to build_without_caret file
+		local build_without_caret_file="${SCRIPT_DIR}/build_without_caret"
+		cp "$failed_packages_file" "$build_without_caret_file"
+		echo ""
+		echo "=========================================="
+		echo "Attempting to build remaining packages WITHOUT CARET..."
+		echo "Packages to build without CARET:"
+		cat "$build_without_caret_file"
+		echo "=========================================="
+		
+		# Build without CARET: remove CARET-specific environment variables and CMake args
+		# CRITICAL: Unset LD_PRELOAD FIRST before using any shell commands (tr, grep, paste, etc.)
+		# Otherwise, these commands will fail because they try to load CARET libraries
+		local old_ld_preload="$LD_PRELOAD"
+		unset LD_PRELOAD
+		
+		# Save current environment (after unsetting LD_PRELOAD so commands work)
+		local old_ld_library_path="$LD_LIBRARY_PATH"
+		local old_library_path="$LIBRARY_PATH"
+		local old_cmake_library_path="$CMAKE_LIBRARY_PATH"
+		local old_tracetools_dir="$tracetools_DIR"
+		
+		# Remove CARET paths from library paths (now safe because LD_PRELOAD is unset)
+		export LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | tr ':' '\n' | grep -vF "${SCRIPT_DIR}/ros2_caret_ws/install" | paste -sd: -)
+		export LIBRARY_PATH=$(echo "$LIBRARY_PATH" | tr ':' '\n' | grep -vF "${SCRIPT_DIR}/ros2_caret_ws/install" | paste -sd: -)
+		export CMAKE_LIBRARY_PATH=$(echo "$CMAKE_LIBRARY_PATH" | tr ':' '\n' | grep -vF "${SCRIPT_DIR}/ros2_caret_ws/install" | paste -sd: -)
+		unset tracetools_DIR
+		
+		# Remove CARET from CMAKE_PREFIX_PATH
+		local old_cmake_prefix_path="$CMAKE_PREFIX_PATH"
+		export CMAKE_PREFIX_PATH=$(echo "$CMAKE_PREFIX_PATH" | tr ':' '\n' | grep -vF "${SCRIPT_DIR}/ros2_caret_ws/install" | paste -sd: -)
+		
+		# CRITICAL: Clean build cache for failed packages before building without CARET
+		# This ensures we start fresh without any CARET-linked artifacts
+		echo "Cleaning build cache for packages to build without CARET..."
+		local packages_to_build_without_caret=$(tr '\n' ' ' < "$build_without_caret_file" | sed 's/ $//')
+		for pkg in $packages_to_build_without_caret; do
+			if [ -d "build/$pkg" ]; then
+				echo "  Cleaning build/$pkg..."
+				rm -rf "build/$pkg"
+			fi
+			if [ -d "install/$pkg" ]; then
+				echo "  Cleaning install/$pkg..."
+				rm -rf "install/$pkg"
+			fi
+		done
+		
+		# Build with minimal CMake args (no CARET-specific settings)
+		# Note: packages_to_build_without_caret is already defined above
+		# Try to disable CARET tracing if possible (some packages may support this)
+		local cmake_args_without_caret="-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF"
+		# Note: There's no standard CMake variable to disable CARET, but we try to ensure
+		# CARET libraries are not found by explicitly excluding CARET paths
+		
+		echo "Building packages without CARET: $packages_to_build_without_caret"
+		echo "CMAKE_ARGS (without CARET): $cmake_args_without_caret"
+		echo ""
+		echo "⚠ NOTE: If these packages fail with 'undefined reference' to CARET symbols"
+		echo "  (ros_trace_message_construct, ros_trace_rclcpp_intra_publish, etc.),"
+		echo "  it means they depend on CARET-instrumented libraries (like rclcpp)"
+		echo "  that were built WITH CARET. These packages cannot be built without CARET"
+		echo "  unless all their dependencies are also rebuilt without CARET."
+		
+		# Log to installation_env
+		{
+			echo "=== Building WITHOUT CARET ==="
+			echo "Packages: $packages_to_build_without_caret"
+			echo "CMAKE_ARGS: $cmake_args_without_caret"
+			echo "CMAKE_PREFIX_PATH: $CMAKE_PREFIX_PATH"
+			echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+			echo "==============================="
+		} | tee -a "${SCRIPT_DIR}/installation_env"
+		
+		colcon build --packages-select $packages_to_build_without_caret \
+		  --symlink-install \
+		  --cmake-clean-cache \
+		  --cmake-args ${cmake_args_without_caret} \
+		  2>&1 | tee -a "$build_log"
+		
+		local build_without_caret_exit_code=${PIPESTATUS[0]}
+		
+		# Restore environment
+		export LD_LIBRARY_PATH="$old_ld_library_path"
+		export LIBRARY_PATH="$old_library_path"
+		export CMAKE_LIBRARY_PATH="$old_cmake_library_path"
+		if [ -n "$old_ld_preload" ]; then
+			export LD_PRELOAD="$old_ld_preload"
+		fi
+		if [ -n "$old_tracetools_dir" ]; then
+			export tracetools_DIR="$old_tracetools_dir"
+		fi
+		export CMAKE_PREFIX_PATH="$old_cmake_prefix_path"
+		
+		# Check if build without CARET succeeded
+		rm -f "$failed_packages_file"
+		detect_failed_packages "$build_log" "$failed_packages_file"
+		
+		if [ ! -s "$failed_packages_file" ]; then
+			echo ""
+			echo "=========================================="
+			echo "✓ All packages built successfully (some without CARET)"
+			echo "Packages built without CARET are in: $build_without_caret_file"
+			echo "=========================================="
+			return 0
+		else
+			# Log permanently failed packages and continue
+			local unable_to_build_file="${SCRIPT_DIR}/unable_to_build.txt"
+			cp "$failed_packages_file" "$unable_to_build_file"
+			echo ""
+			echo "=========================================="
+			echo "⚠ WARNING: Some packages could not be built after all attempts"
+			echo "These packages have been logged to: $unable_to_build_file"
+			echo "The installation will continue..."
+			echo "=========================================="
+			cat "$unable_to_build_file"
+			return 0  # Continue execution instead of failing
+		fi
+	else
+		echo "✓ All packages built successfully!"
+		return 0
+	fi
 }
 
 # -------------------- Colcon Build ------------------------
