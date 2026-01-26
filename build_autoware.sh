@@ -575,9 +575,68 @@ copy_autoware_dummy_perception_publisher() {
 	fi
 }
 
-# Copy the modified autoware_dummy_perception_publisher folder
-copy_autoware_dummy_perception_publisher
+# Fix PCL pedantic warnings in autoware_dummy_perception_publisher CMakeLists.txt
+# This adds the necessary compile options to suppress PCL's anonymous struct warnings
+apply_pcl_pedantic_fix() {
+	local cmake_file="${SCRIPT_DIR}/autoware/src/universe/autoware_universe/simulator/autoware_dummy_perception_publisher/CMakeLists.txt"
+	
+	if [ ! -f "$cmake_file" ]; then
+		echo "⚠ Warning: CMakeLists.txt not found: $cmake_file"
+		return
+	fi
+	
+	# Check if fix is already applied
+	if grep -q "PCL uses anonymous structs/unions; silence pedantic Werror" "$cmake_file"; then
+		echo "✓ PCL pedantic fix already applied to autoware_dummy_perception_publisher CMakeLists.txt"
+		return
+	fi
+	
+	echo "Applying PCL pedantic fix to autoware_dummy_perception_publisher CMakeLists.txt..."
+	
+	# Create a backup
+	cp "$cmake_file" "${cmake_file}.bak"
+	
+	# Find the line with the closing parenthesis of target_include_directories
+	# Pattern: $<INSTALL_INTERFACE:include>)
+	local insert_after_line=$(grep -n '\$<INSTALL_INTERFACE:include>)' "$cmake_file" | head -1 | cut -d: -f1)
+	
+	if [ -z "$insert_after_line" ]; then
+		echo "⚠ Warning: Could not find insertion point in CMakeLists.txt"
+		mv "${cmake_file}.bak" "$cmake_file"
+		return
+	fi
+	
+	# Use awk to insert the fix after the target_include_directories block
+	awk -v line="$insert_after_line" '
+		NR == line {
+			print
+			print ""
+			print "# PCL uses anonymous structs/unions; silence pedantic Werror for this target"
+			print "target_compile_options(${PROJECT_NAME}_node PRIVATE"
+			print "  -Wno-pedantic"
+			print "  -Wno-error=pedantic"
+			print ")"
+			next
+		}
+		{print}
+	' "$cmake_file" > "${cmake_file}.tmp" && mv "${cmake_file}.tmp" "$cmake_file"
+	
+	# Verify the fix was applied
+	if grep -q "PCL uses anonymous structs/unions; silence pedantic Werror" "$cmake_file"; then
+		echo "✓ PCL pedantic fix successfully applied to autoware_dummy_perception_publisher CMakeLists.txt"
+		rm -f "${cmake_file}.bak"
+	else
+		echo "⚠ Warning: Fix may not have been applied correctly. Restoring backup..."
+		mv "${cmake_file}.bak" "$cmake_file"
+	fi
+}
 
+# Apply PCL pedantic fix
+apply_pcl_pedantic_fix
+
+# https://tier4.github.io/caret_doc/main/faq/known_issues/#build
+sudo cp /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake.bak
+sudo sed -i -e 's/\/opt\/ros\/humble\/lib\/libtracetools.so;//g' /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake
 # Clean any Autoware overlay from the current shell environment so that CMake
 # sees a clean base (opt/ros + ros2_humble + CARET) instead of resolving
 # rclcpp / friends from a previously sourced autoware/install.

@@ -609,10 +609,11 @@ if [ -f  "${SCRIPT_DIR}/.ros_dependencies" ] && (( ! rebuild_autoware )) ; then
 	echo "#########################################"
 	
 else
-	[ -d src ] && sudo rm -rf src
-	mkdir src
+	
 	#source /opt/ros/humble/setup.bash
 	cd "${SCRIPT_DIR}/autoware"
+	[ -d src ] && sudo rm -rf src
+	mkdir src
 	vcs import src < autoware.repos
 	vcs import src < extra-packages.repos
 
@@ -696,7 +697,7 @@ if [ "$rebuild_failed_packages" = "1" ]; then
 	# Convert newline-separated list to space-separated
 	packages_to_rebuild=$(tr '\n' ' ' < "$unable_to_build_file" | sed 's/ $//')
 	echo "Rebuilding failed packages from unable_to_build.txt: $packages_to_rebuild"
-	run_build_autoware_clean "${rebuild_autoware}" "autoware_accel_brake_map_calibrator"
+	run_build_autoware_clean "${rebuild_autoware}" "autoware_dummy_perception_publisher"
 else
 	run_build_autoware_clean "${rebuild_autoware}"
 fi
