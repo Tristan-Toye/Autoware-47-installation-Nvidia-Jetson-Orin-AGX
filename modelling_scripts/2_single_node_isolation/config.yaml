@@ -1,0 +1,37 @@
+# Single Node Isolation Configuration
+# ====================================
+# Configuration for isolating and recording individual ROS 2 nodes
+# for detailed performance profiling.
+
+# Path to node latency CSV from CARET analysis
+node_latency_csv: "../1_caret_tracing/results/node_latency_ranking.csv"
+
+# Path to node inventory CSV from identify_nodes script
+node_inventory_csv: "./ros2_node_inventory.csv"
+
+# Number of top nodes (by latency) to isolate
+top_n_nodes: 10
+
+# Output directory for single node recordings
+output_dir: "./single_node_run"
+
+# Path to Autoware installation
+autoware_path: "${HOME}/autoware"
+
+# Path to ROS2 setup script
+ros2_setup: "/opt/ros/humble/setup.bash"
+
+# Path to rosbag for replay
+rosbag_path: "${HOME}/autoware_map/sample-rosbag"
+
+# Rosbag playback rate (same as used in CARET recording)
+rosbag_rate: 0.2
+
+# Path to ros2_single_node_replayer installation
+replayer_path: "${HOME}/ros2_single_node_replayer"
+
+# Map path for Autoware
+map_path: "${HOME}/autoware_map/sample-map-rosbag"
+
+# Timeout for Autoware initialization (seconds)
+autoware_init_timeout: 30

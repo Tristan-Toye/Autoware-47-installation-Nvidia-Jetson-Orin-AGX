@@ -1,0 +1,208 @@
+# Perf Profiling Configuration
+# ====================================
+# Configuration for running perf on isolated ROS 2 nodes.
+# Metrics are organized into clusters due to perf's hardware counter limitations.
+
+# Maximum events per cluster (hardware limitation)
+max_events_per_cluster: 8
+
+# Path to single node recordings
+single_node_dir: "../2_single_node_isolation/single_node_run"
+
+# Output directory for perf data
+output_dir: "./perf_data"
+
+# Perf recording duration in seconds (0 = until process ends)
+duration: 0
+
+# Number of repetitions for each measurement
+repetitions: 3
+
+# ===========================================================================
+# METRIC CLUSTERS
+# ===========================================================================
+# Each cluster can contain up to 8 metrics. Metrics are measured together
+# to capture correlated behavior.
+
+clusters:
+  # ===========================================================================
+  # Architecture-Agnostic Clusters (Generic perf events)
+  # ===========================================================================
+  
+  - name: "core_execution"
+    description: "Fundamental execution metrics"
+    metrics:
+      - "instructions"
+      - "cpu-cycles"
+      - "branches"
+      - "branch-misses"
+      - "task-clock"
+      - "cpu-clock"
+      - "context-switches"
+      - "cpu-migrations"
+  
+  - name: "cache_l1_data"
+    description: "L1 data cache metrics"
+    metrics:
+      - "L1-dcache-loads"
+      - "L1-dcache-load-misses"
+      - "cache-references"
+      - "cache-misses"
+      - "instructions"
+  
+  - name: "cache_l1_instruction"
+    description: "L1 instruction cache metrics"
+    metrics:
+      - "L1-icache-loads"
+      - "L1-icache-load-misses"
+      - "instructions"
+  
+  - name: "cache_llc"
+    description: "Last level cache metrics"
+    metrics:
+      - "LLC-loads"
+      - "LLC-load-misses"
+      - "cache-references"
+      - "cache-misses"
+      - "instructions"
+  
+  - name: "memory_tlb"
+    description: "TLB and page fault metrics"
+    metrics:
+      - "dTLB-loads"
+      - "dTLB-load-misses"
+      - "iTLB-loads"
+      - "iTLB-load-misses"
+      - "page-faults"
+      - "major-faults"
+      - "minor-faults"
+  
+  - name: "branch_analysis"
+    description: "Branch prediction metrics"
+    metrics:
+      - "branches"
+      - "branch-misses"
+      - "branch-loads"
+      - "branch-load-misses"
+      - "instructions"
+  
+  # ===========================================================================
+  # ARM Cortex-A78 Specific Clusters
+  # ===========================================================================
+  
+  - name: "arm_core"
+    description: "ARM Cortex-A78 core execution"
+    arm_specific: true
+    metrics:
+      - "armv8_cortex_a78/inst_retired/"
+      - "armv8_cortex_a78/cpu_cycles/"
+      - "armv8_cortex_a78/br_retired/"
+      - "armv8_cortex_a78/br_mis_pred/"
+      - "armv8_cortex_a78/inst_spec/"
+  
+  - name: "arm_l1d_cache"
+    description: "ARM L1 data cache"
+    arm_specific: true
+    metrics:
+      - "armv8_cortex_a78/l1d_cache/"
+      - "armv8_cortex_a78/l1d_cache_refill/"
+      - "armv8_cortex_a78/l1d_cache_wb/"
+      - "armv8_cortex_a78/l1d_cache_lmiss_rd/"
+  
+  - name: "arm_l1i_cache"
+    description: "ARM L1 instruction cache"
+    arm_specific: true
+    metrics:
+      - "armv8_cortex_a78/l1i_cache/"
+      - "armv8_cortex_a78/l1i_cache_refill/"
+      - "armv8_cortex_a78/l1i_cache_lmiss/"
+  
+  - name: "arm_l2_cache"
+    description: "ARM L2 cache"
+    arm_specific: true
+    metrics:
+      - "armv8_cortex_a78/l2d_cache/"
+      - "armv8_cortex_a78/l2d_cache_refill/"
+      - "armv8_cortex_a78/l2d_cache_wb/"
+      - "armv8_cortex_a78/l2d_cache_allocate/"
+  
+  - name: "arm_l3_cache"
+    description: "ARM L3 cache"
+    arm_specific: true
+    metrics:
+      - "armv8_cortex_a78/l3d_cache/"
+      - "armv8_cortex_a78/l3d_cache_refill/"
+      - "armv8_cortex_a78/l3d_cache_allocate/"
+      - "armv8_cortex_a78/ll_cache_rd/"
+      - "armv8_cortex_a78/ll_cache_miss_rd/"
+  
+  - name: "arm_tlb"
+    description: "ARM TLB metrics"
+    arm_specific: true
+    metrics:
+      - "armv8_cortex_a78/l1d_tlb/"
+      - "armv8_cortex_a78/l1d_tlb_refill/"
+      - "armv8_cortex_a78/l2d_tlb/"
+      - "armv8_cortex_a78/l2d_tlb_refill/"
+      - "armv8_cortex_a78/dtlb_walk/"
+      - "armv8_cortex_a78/itlb_walk/"
+  
+  - name: "arm_bus_memory"
+    description: "ARM bus and memory access"
+    arm_specific: true
+    metrics:
+      - "armv8_cortex_a78/bus_access/"
+      - "armv8_cortex_a78/bus_cycles/"
+      - "armv8_cortex_a78/mem_access/"
+
+# ===========================================================================
+# Derived Metrics Configuration
+# ===========================================================================
+# These are computed from raw metrics during analysis.
+
+derived_metrics:
+  - name: "IPC"
+    formula: "instructions / cpu-cycles"
+    description: "Instructions Per Cycle"
+  
+  - name: "branch_miss_rate"
+    formula: "branch-misses / branches * 100"
+    unit: "%"
+    description: "Branch misprediction rate"
+  
+  - name: "L1D_miss_rate"
+    formula: "L1-dcache-load-misses / L1-dcache-loads * 100"
+    unit: "%"
+    description: "L1 data cache miss rate"
+  
+  - name: "L1I_miss_rate"
+    formula: "L1-icache-load-misses / L1-icache-loads * 100"
+    unit: "%"
+    description: "L1 instruction cache miss rate"
+  
+  - name: "LLC_miss_rate"
+    formula: "cache-misses / cache-references * 100"
+    unit: "%"
+    description: "Last level cache miss rate"
+  
+  - name: "dTLB_miss_rate"
+    formula: "dTLB-load-misses / dTLB-loads * 100"
+    unit: "%"
+    description: "Data TLB miss rate"
+  
+  - name: "MPKI_L1D"
+    formula: "L1-dcache-load-misses / instructions * 1000"
+    description: "L1D misses per kilo-instruction"
+  
+  - name: "MPKI_LLC"
+    formula: "cache-misses / instructions * 1000"
+    description: "LLC misses per kilo-instruction"
+  
+  - name: "branch_density"
+    formula: "branches / instructions * 100"
+    unit: "%"
+    description: "Branch instruction density"
+  
+  - name: "memory_intensity"
+    formula: "L1-dcache-loads / instructions"
+    description: "Memory operations per instruction"

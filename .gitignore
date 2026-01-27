@@ -5,6 +5,10 @@
 !autoware_dummy_perception_publisher/
 !autoware_dummy_perception_publisher/**
 !autoware_dummy_perception_publisher/**/
+!identify_nodes/
+!caret/
+!modelling_scripts/
+!modelling_scripts/**
 
 # Ignore files with "flag" in the name
 *flag*
