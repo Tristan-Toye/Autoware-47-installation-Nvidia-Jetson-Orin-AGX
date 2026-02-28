@@ -259,7 +259,8 @@ build_with_retry() {
 	fi
 	
 	# build_autoware_addition.sh
-	CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF"
+	# Jetson Orin AGX = sm_87; overrides packages that default to unsupported compute_101
+	CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_CUDA_ARCHITECTURES=87"
 	if [ "${CARET_VERBOSE_LINK:-0}" = "1" ]; then
 		CMAKE_ARGS="${CMAKE_ARGS} -DCMAKE_VERBOSE_MAKEFILE=ON"
 		echo "Verbose link logging enabled (CARET_VERBOSE_LINK=1)"
@@ -401,12 +402,33 @@ apply_pcl_pedantic_fix() {
 	fi
 }
 
+# Jetson Orin (sm_87) does not support compute_101/110/120; packages that hardcode these
+# in CUDA_NVCC_FLAGS override CMAKE_CUDA_ARCHITECTURES. Comment out those lines so only
+# sm_86/87/89 are used.
+apply_jetson_cuda_arch_fix() {
+	local src_dir="${SCRIPT_DIR}/autoware/src"
+	local count=0
+	while IFS= read -r -d '' f; do
+		if grep -q 'compute_101\|compute_110\|compute_120' "$f" 2>/dev/null; then
+			sed -i '/list(APPEND CUDA_NVCC_FLAGS.*compute_101/s/^/# Jetson: /' "$f"
+			sed -i '/list(APPEND CUDA_NVCC_FLAGS.*compute_110/s/^/# Jetson: /' "$f"
+			sed -i '/list(APPEND CUDA_NVCC_FLAGS.*compute_120/s/^/# Jetson: /' "$f"
+			count=$((count + 1))
+		fi
+	done < <(find "$src_dir" -name "CMakeLists.txt" -print0 2>/dev/null)
+	if [ "$count" -gt 0 ]; then
+		echo "✓ Jetson CUDA arch fix applied to $count CMakeLists.txt (commented compute_101/110/120)"
+	fi
+}
+
 # Apply PCL pedantic fix
 apply_pcl_pedantic_fix
+# Apply Jetson CUDA arch fix so nvcc does not see unsupported compute_101
+apply_jetson_cuda_arch_fix
 
 # https://tier4.github.io/caret_doc/main/faq/known_issues/#build
-sudo cp /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake.bak
-sudo sed -i -e 's/\/opt\/ros\/humble\/lib\/libtracetools.so;//g' /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake
+# sudo cp /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake.bak
+#sudo sed -i -e 's/\/opt\/ros\/humble\/lib\/libtracetools.so;//g' /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake
 # Clean any Autoware overlay from the current shell environment so that CMake
 # sees a clean base (opt/ros + ros2_humble + CARET) instead of resolving
 # rclcpp / friends from a previously sourced autoware/install.
@@ -417,6 +439,8 @@ sudo sed -i -e 's/\/opt\/ros\/humble\/lib\/libtracetools.so;//g' /opt/ros/humble
 # Reset CMAKE_PREFIX_PATH to just .local (from bashrc), then source in same order as working script
 # This ensures a clean environment that matches test_autoware_dummy_perception_publisher.sh
 # export CMAKE_PREFIX_PATH="$HOME/.local"
+
+# copy_autoware_dummy_perception_publisher
 
 source_autoware_build_env
 

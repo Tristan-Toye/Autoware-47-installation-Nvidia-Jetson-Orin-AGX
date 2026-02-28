@@ -156,6 +156,7 @@ export INFERENCE_ONLY TAG_SPCONV TAG_CUMM PREFIX PY USE_CUDA_SUFFIX
 # --------------- Autoware repo ----------------------
 cd "${SCRIPT_DIR}"
 sudo apt install python3.10-venv -y
+autoware_version_tag="1.7.1"
 
 if [ -f "${SCRIPT_DIR}/.autoware_setup_flag" ] && (( ! rerun_autoware_setup )); then
 	echo "#########################################"
@@ -165,26 +166,38 @@ if [ -f "${SCRIPT_DIR}/.autoware_setup_flag" ] && (( ! rerun_autoware_setup )); 
 	echo "#########################################"
 else
 	if [ -d autoware ]; then
-	    	echo "Autoware directory already exists. Checking out tag 1.5.0..."
+	    	echo "Autoware directory already exists. Checking out tag ${autoware_version_tag}..."
 		cd autoware
 		git fetch --tags
-		git checkout 1.5.0 || {
-			echo "Warning: Could not checkout tag 1.5.0. Current branch/commit:"
+		git checkout ${autoware_version_tag} || {
+			echo "Warning: Could not checkout tag ${autoware_version_tag}. Current branch/commit:"
 			git describe --tags --always
 			exit 1
 		}
-		echo "Autoware 1.5.0 checked out successfully"
+		echo "Autoware 1.7.1 checked out successfully"
 		cd "${SCRIPT_DIR}"
 	else
-	  	git clone --branch 1.5.0 --tags https://github.com/autowarefoundation/autoware.git
+		# Clone repo then checkout release tag 1.7.1 (releases are tags on GitHub)
+		git clone --tags https://github.com/autowarefoundation/autoware.git
+		cd autoware
+		git checkout ${autoware_version_tag}
+		cd "${SCRIPT_DIR}"
 		echo "#############################################"
-		echo "Autoware 1.5.0 cloned and checked out"
+		echo "Autoware ${autoware_version_tag} cloned and checked out"
 		echo "#############################################"
 	fi
 	cp "${SCRIPT_DIR}/setup-dev-env.sh" "${SCRIPT_DIR}/autoware/setup-dev-env.sh"
 	cd "${SCRIPT_DIR}/autoware"
 
+	# Re-add agnocast PPA so setup-dev-env.sh can install it; we remove it again right after
+	sudo add-apt-repository -y ppa:t4-system-software/agnocast || true
+	sudo apt-get update -y || true
+
 	./setup-dev-env.sh -y --no-nvidia --no-cuda-drivers --download-artifacts
+
+	# Remove agnocast again so it is not left installed (see remove_agnocast.sh)
+	"${SCRIPT_DIR}/remove_agnocast.sh" || true
+
 	touch "${SCRIPT_DIR}/.autoware_setup_flag"
 fi
 
@@ -212,8 +225,14 @@ else
 	cd "${SCRIPT_DIR}/autoware"
 	[ -d src ] && sudo rm -rf src
 	mkdir src
-	vcs import src < autoware.repos
-	vcs import src < extra-packages.repos
+	# Support repos in repositories/ or in current folder
+	if [ -d repositories ]; then
+		vcs import src < repositories/autoware.repos
+		vcs import src < repositories/extra-packages.repos
+	else
+		vcs import src < autoware.repos
+		vcs import src < extra-packages.repos
+	fi
 
 	rosdep install -y --from-paths src --ignore-src --rosdistro humble
 
@@ -264,26 +283,25 @@ run_build_autoware_clean() {
 	local packages="$2"
 	# Use a clean shell so previous sourcing does not affect the build.
 	# Keep only minimal environment and source in the correct order.
+	# Include CUDA bin so nvcc is found when building TensorRT/CUDA packages
+	CUDA_BIN="${CUDA_PATH:-/usr/local/cuda}/bin"
 	env -i \
 		HOME="$HOME" \
 		USER="$USER" \
 		LOGNAME="$LOGNAME" \
-		PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+		PATH="${CUDA_BIN}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
 		SCRIPT_DIR="$SCRIPT_DIR" \
 		CARET_VERBOSE_LINK="$CARET_VERBOSE_LINK" \
 		bash -lc '
 			set -e
-			if [ -n "$1" ]; then
-				"${SCRIPT_DIR}/build_autoware.sh" "${SCRIPT_DIR}" "$0" "$1"
-			else
-				"${SCRIPT_DIR}/build_autoware.sh" "${SCRIPT_DIR}" "$0"
-			fi
+			# $1=rebuild_flag, $2=packages (when -r: list from failed_packages.txt)
+			"${SCRIPT_DIR}/build_autoware.sh" "${SCRIPT_DIR}" "$1" "$2"
 		' "${rebuild_flag}" "${packages}"
 }
 
 if [ "$rebuild_failed_packages" = "1" ]; then
 	# Read packages from unable_to_build.txt
-	unable_to_build_file="${SCRIPT_DIR}/unable_to_build.txt"
+	unable_to_build_file="${SCRIPT_DIR}/failed_packages.txt"
 	if [ ! -f "$unable_to_build_file" ]; then
 		echo "Error: unable_to_build.txt not found. Cannot rebuild failed packages." >&2
 		exit 1
@@ -295,7 +313,7 @@ if [ "$rebuild_failed_packages" = "1" ]; then
 	# Convert newline-separated list to space-separated
 	packages_to_rebuild=$(tr '\n' ' ' < "$unable_to_build_file" | sed 's/ $//')
 	echo "Rebuilding failed packages from unable_to_build.txt: $packages_to_rebuild"
-	run_build_autoware_clean "${rebuild_autoware}" "autoware_dummy_perception_publisher"
+	run_build_autoware_clean "${rebuild_autoware}" "$packages_to_rebuild"
 else
 	run_build_autoware_clean "${rebuild_autoware}"
 fi
