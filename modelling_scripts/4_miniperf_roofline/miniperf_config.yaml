@@ -1,0 +1,174 @@
+# miniperf Roofline Configuration
+# ============================================================
+# Configuration for running miniperf roofline analysis on
+# isolated Autoware ROS 2 nodes on the Nvidia Jetson Orin AGX.
+#
+# These are the same nodes identified as high-latency in the
+# CARET tracing experiment (1_caret_tracing).
+# ============================================================
+
+# ---------------------------------------------------------------------------
+# TARGET NODES
+# Same 15 nodes identified in CARET tracing experiment.
+# Each node maps to a ROS 2 package for (re-)compilation.
+# ---------------------------------------------------------------------------
+target_nodes:
+  - node_name: "lidar_centerpoint"
+    package: "lidar_centerpoint"
+    executable: "lidar_centerpoint_node"
+    description: "3D object detection using CenterPoint model"
+
+  - node_name: "ndt_scan_matcher"
+    package: "ndt_scan_matcher"
+    executable: "ndt_scan_matcher_node"
+    description: "LiDAR-based point cloud localization"
+
+  - node_name: "behavior_path_planner"
+    package: "behavior_path_planner"
+    executable: "behavior_path_planner_node"
+    description: "High-level path planning with lane changes"
+
+  - node_name: "motion_velocity_planner"
+    package: "motion_velocity_planner"
+    executable: "motion_velocity_planner_node"
+    description: "Velocity planning along the planned path"
+
+  - node_name: "ekf_localizer"
+    package: "ekf_localizer"
+    executable: "ekf_localizer_node"
+    description: "EKF-based pose estimation"
+
+  - node_name: "euclidean_cluster"
+    package: "euclidean_cluster"
+    executable: "euclidean_cluster_node"
+    description: "LiDAR point cloud clustering"
+
+  - node_name: "multi_object_tracker"
+    package: "multi_object_tracker"
+    executable: "multi_object_tracker_node"
+    description: "Multi-object tracking across frames"
+
+  - node_name: "map_based_prediction"
+    package: "map_based_prediction"
+    executable: "map_based_prediction_node"
+    description: "Trajectory prediction using HD map"
+
+  - node_name: "mission_planner"
+    package: "mission_planner"
+    executable: "mission_planner_node"
+    description: "Route planning from start to goal"
+
+  - node_name: "autonomous_emergency_braking"
+    package: "autonomous_emergency_braking"
+    executable: "autonomous_emergency_braking_node"
+    description: "Emergency braking safety module"
+
+  - node_name: "occupancy_grid_map_node"
+    package: "probabilistic_occupancy_grid_map"
+    executable: "occupancy_grid_map_node"
+    description: "2D occupancy grid from LiDAR"
+
+  - node_name: "shape_estimation"
+    package: "shape_estimation"
+    executable: "shape_estimation_node"
+    description: "Object shape/size estimation"
+
+  - node_name: "trajectory_follower_controller"
+    package: "trajectory_follower_nodes"
+    executable: "controller_node"
+    description: "Low-level trajectory tracking controller"
+
+  - node_name: "velocity_smoother"
+    package: "velocity_smoother"
+    executable: "velocity_smoother_node"
+    description: "Velocity profile smoother"
+
+  - node_name: "pointcloud_concatenate_data"
+    package: "pointcloud_preprocessor"
+    executable: "pointcloud_concatenate_data_synchronizer_node"
+    description: "Merges multiple LiDAR point clouds"
+
+# ---------------------------------------------------------------------------
+# JETSON ORIN AGX HARDWARE CEILINGS
+# These define the roofline upper bounds.
+# Source: Nvidia Jetson Orin Technical Reference Manual +
+#         Jetson Orin AGX product brief (64GB model, max-N power mode)
+# ---------------------------------------------------------------------------
+hardware:
+  name: "Nvidia Jetson Orin AGX (64GB)"
+  # ARM Cortex-A78AE × 12 cores @ 2.2 GHz
+  cpu:
+    peak_fp64_gflops: 52.8       # 12 cores × 2.2GHz × 2 ops/cycle (FMA scalar)
+    peak_fp32_gflops: 105.6      # 12 cores × 2.2GHz × 4 (ASIMD FMA, 2 floats/lane)
+    peak_fp32_simd_gflops: 422.4 # 12 cores × 2.2GHz × 16 (128-bit ASIMD, FMA)
+    peak_int8_tops: 1.7          # Approximate integer throughput
+    # LPDDR5 memory bandwidth
+    peak_memory_bandwidth_GBps: 204.8  # LPDDR5 at 6400 Mbps × 256-bit bus
+  # DLA (Deep Learning Accelerator) — not used in ROS 2 CPU nodes
+  # GPU (Ampere 2048 CUDA cores) — not targeted in this experiment
+
+  # Cache hierarchy (per-core, ARM Cortex-A78AE)
+  cache:
+    l1d_size_KB: 64
+    l1i_size_KB: 64
+    l2_size_KB: 512     # per-core
+    l3_size_MB: 4       # shared LLC (4MB total for all 12 Cortex-A78AE cores)
+
+# ---------------------------------------------------------------------------
+# PATHS
+# Adjust these to match your Jetson environment.
+# ---------------------------------------------------------------------------
+paths:
+  # Where miniperf was cloned and built
+  miniperf_root: "${HOME}/miniperf"
+  mperf_binary: "${HOME}/miniperf/target/release/mperf"
+  clang_plugin: "${HOME}/miniperf/target/clang_plugin/lib/miniperf_plugin.so"
+  libcollector: "${HOME}/miniperf/target/release/libcollector.so"
+
+  # Autoware install
+  autoware_root: "${HOME}/autoware"
+  autoware_setup: "${HOME}/autoware/install/setup.bash"
+  ros2_setup: "/opt/ros/humble/setup.bash"
+
+  # Single node replayer recordings (from experiment 2)
+  single_node_run_dir: "../2_single_node_isolation/single_node_run"
+
+  # Output directories (relative to this script's location)
+  instrumented_bins: "./instrumented_bins"
+  miniperf_data: "./miniperf_data"
+  results: "./results"
+  graphs: "./graphs"
+
+# ---------------------------------------------------------------------------
+# MINIPERF SETTINGS
+# ---------------------------------------------------------------------------
+miniperf:
+  # Number of repetitions for stat mode (averaged for stability)
+  stat_repetitions: 5
+
+  # Roofline scenario settings
+  roofline:
+    # miniperf roofline does two passes automatically:
+    #   Pass 1: PMU hardware counters (cycles, mem bandwidth)
+    #   Pass 2: LLVM IR loop statistics (FLOPs, memory bytes)
+    scenario: "roofline"
+
+  # Stat scenario (quick sanity-check, no instrumented binary needed)
+  stat:
+    scenario: "snapshot"
+
+# ---------------------------------------------------------------------------
+# COLCON BUILD OPTIONS FOR INSTRUMENTED BINARIES
+# The Clang plugin is injected via compile flags.
+# ---------------------------------------------------------------------------
+build:
+  # Clang version must match the one used to build LLVM
+  clang_version: "19"
+  clang_cc: "clang-19"
+  clang_cxx: "clang++-19"
+  optimization_level: "-O3"
+  debug_info: "-g"
+  extra_cxxflags: "-fno-omit-frame-pointer"
+  # colcon build isolation mode
+  colcon_build_base: "build_instrumented"
+  colcon_install_base: "install_instrumented"
