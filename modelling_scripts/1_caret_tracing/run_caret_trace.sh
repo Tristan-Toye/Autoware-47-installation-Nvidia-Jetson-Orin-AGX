@@ -2,8 +2,9 @@
 # =============================================================================
 # CARET Trace Recording Script
 # =============================================================================
-# This script launches Autoware with CARET tracing enabled and records
-# trace data for performance analysis.
+# Launches Autoware via caret_autoware_launch (which handles LTTng setup
+# internally via caret.launch.py), plays the rosbag, then copies the
+# trace output to a local directory.
 #
 # Usage: ./run_caret_trace.sh [options]
 #   Options:
@@ -16,14 +17,12 @@
 
 set -e
 
-# Default values
 MAP_PATH="${HOME}/autoware_map/sample-map-rosbag"
 ROSBAG_PATH="${HOME}/autoware_map/sample-rosbag"
-OUTPUT_DIR="$(dirname "$0")/trace_data"
+OUTPUT_DIR="$(cd "$(dirname "$0")" && pwd)/trace_data"
 ROSBAG_RATE="0.2"
 POST_DURATION=5
 
-# Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
         --map-path) MAP_PATH="$2"; shift 2 ;;
@@ -35,68 +34,57 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Create output directory with timestamp
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 TRACE_DIR="${OUTPUT_DIR}/caret_trace_${TIMESTAMP}"
+CARET_SESSION_NAME="autoware_trace_${TIMESTAMP}"
 mkdir -p "${TRACE_DIR}"
 
 echo "=============================================="
-echo "CARET Trace Recording"
+echo "CARET Trace Recording (caret_autoware_launch)"
 echo "=============================================="
-echo "Map path:      ${MAP_PATH}"
-echo "Rosbag path:   ${ROSBAG_PATH}"
-echo "Output dir:    ${TRACE_DIR}"
-echo "Rosbag rate:   ${ROSBAG_RATE}"
+echo "Map path:       ${MAP_PATH}"
+echo "Rosbag path:    ${ROSBAG_PATH}"
+echo "Output dir:     ${TRACE_DIR}"
+echo "Rosbag rate:    ${ROSBAG_RATE}"
+echo "Session name:   ${CARET_SESSION_NAME}"
 echo "=============================================="
 
-# Source ROS2 and CARET environment
-# shellcheck source=/dev/null
-if [ -f "/opt/ros/humble/setup.bash" ]; then
-    source /opt/ros/humble/setup.bash
-fi
-if [ -f "${HOME}/autoware/install/setup.bash" ]; then
-    source "${HOME}/autoware/install/setup.bash"
-fi
-if [ -f "${HOME}/ros2_caret_ws/install/local_setup.bash" ]; then
-    source "${HOME}/ros2_caret_ws/install/local_setup.bash"
-fi
+# Source ROS2, Autoware, and CARET environments
+source /opt/ros/humble/setup.bash
 
-# Set CARET environment variables
-export LD_PRELOAD=$(find /opt/ros/humble -name 'libcaret*.so' 2>/dev/null | head -1)
-if [ -z "$LD_PRELOAD" ] && [ -d "${HOME}/ros2_caret_ws" ]; then
-    export LD_PRELOAD=$(find "${HOME}/ros2_caret_ws" -name 'libcaret*.so' 2>/dev/null | head -1)
-fi
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${PROJECT_ROOT}/autoware/install/setup.bash"
+source "${PROJECT_ROOT}/ros2_caret_ws/install/local_setup.bash"
+export LD_PRELOAD="${PROJECT_ROOT}/ros2_caret_ws/install/lib/libcaret.so"
 
-# Function to cleanup on exit
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    # Kill all background processes
     jobs -p | xargs -r kill 2>/dev/null || true
+    sleep 2
     wait 2>/dev/null || true
+
+    # Copy trace data from default location to our output directory
+    ROS_TRACE_DIR="${HOME}/.ros/tracing/${CARET_SESSION_NAME}"
+    if [ -d "${ROS_TRACE_DIR}" ]; then
+        echo "Copying trace from ${ROS_TRACE_DIR} to ${TRACE_DIR}/lttng"
+        cp -r "${ROS_TRACE_DIR}" "${TRACE_DIR}/lttng"
+    else
+        echo "WARNING: Trace directory not found at ${ROS_TRACE_DIR}"
+        echo "Checking for any active LTTng sessions..."
+        lttng stop "${CARET_SESSION_NAME}" 2>/dev/null || true
+        lttng destroy "${CARET_SESSION_NAME}" 2>/dev/null || true
+        if [ -d "${ROS_TRACE_DIR}" ]; then
+            cp -r "${ROS_TRACE_DIR}" "${TRACE_DIR}/lttng"
+        fi
+    fi
     echo "Trace data saved to: ${TRACE_DIR}"
 }
 trap cleanup EXIT
 
-# Start LTTng session for CARET
-echo "Starting LTTng session..."
-export CARET_SESSION_NAME="autoware_trace_${TIMESTAMP}"
-
-# Create LTTng session
-lttng create "${CARET_SESSION_NAME}" --output="${TRACE_DIR}/lttng"
-
-# Enable CARET tracepoints
-lttng enable-event -u 'ros2:*'
-lttng enable-event -u 'ros2_caret:*'
-
-# Start tracing
-lttng start
-
-echo "LTTng session started: ${CARET_SESSION_NAME}"
-
-# Launch Autoware with CARET support (headless mode)
+# Launch Autoware with CARET tracing via caret_autoware_launch
 echo "Launching Autoware with CARET tracing (headless mode)..."
-ros2 launch caret_autoware_launch autoware.launch.xml \
+ros2 launch caret_autoware_launch logging_simulator.launch.xml \
     map_path:="${MAP_PATH}" \
     vehicle_model:=sample_vehicle \
     sensor_model:=sample_sensor_kit \
@@ -104,30 +92,21 @@ ros2 launch caret_autoware_launch autoware.launch.xml \
     caret_session:="${CARET_SESSION_NAME}" &
 AUTOWARE_PID=$!
 
-# Wait for Autoware to initialize
-echo "Waiting for Autoware to initialize (30 seconds)..."
-sleep 30
+echo "Waiting for Autoware to initialize (45 seconds)..."
+sleep 45
 
-# Check if Autoware is still running
 if ! kill -0 $AUTOWARE_PID 2>/dev/null; then
     echo "ERROR: Autoware failed to start"
     exit 1
 fi
 
 echo "Autoware is running. Starting rosbag playback..."
-
-# Play rosbag
 ros2 bag play "${ROSBAG_PATH}" -r "${ROSBAG_RATE}" -s sqlite3
 
 echo "Rosbag playback completed. Recording for ${POST_DURATION} more seconds..."
 sleep "${POST_DURATION}"
 
-# Stop LTTng session
-echo "Stopping LTTng session..."
-lttng stop
-lttng destroy "${CARET_SESSION_NAME}"
-
-# Kill Autoware
+# Stop Autoware (cleanup trap handles trace copy)
 echo "Stopping Autoware..."
 kill $AUTOWARE_PID 2>/dev/null || true
 wait $AUTOWARE_PID 2>/dev/null || true
@@ -140,5 +119,5 @@ echo "=============================================="
 echo ""
 echo "Next steps:"
 echo "  1. Run: ./analyze_caret_results.sh ${TRACE_DIR}"
-echo "  2. Run: python3 visualize_caret.py ${TRACE_DIR}"
-echo "  3. Run: python3 export_node_latency.py ${TRACE_DIR}"
+echo "  2. Run: python3 visualize_caret.py"
+echo "  3. Run: python3 export_node_latency.py"

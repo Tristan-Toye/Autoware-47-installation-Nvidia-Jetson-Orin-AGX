@@ -1,0 +1,25 @@
+/perception/object_recognition/detection/clustering/shape_estimation:
+  ros__parameters:
+    fix_filtered_objects_label_to_unknown: true
+    model_params:
+      use_ml_shape_estimator: false
+    qos_overrides:
+      /clock:
+        subscription:
+          depth: 1
+          durability: volatile
+          history: keep_last
+          reliability: best_effort
+      /parameter_events:
+        publisher:
+          depth: 1000
+          durability: volatile
+          history: keep_last
+          reliability: reliable
+    use_boost_bbox_optimizer: false
+    use_corrector: true
+    use_filter: true
+    use_sim_time: true
+    use_vehicle_reference_shape_size: false
+    use_vehicle_reference_yaw: false
+

@@ -98,5 +98,103 @@ else
     fi
 fi
 
+# ==================== Fix 4: CHECK_CUDA_ERROR macro redefinition ====================
+# autoware_lidar_centerpoint defines CHECK_CUDA_ERROR in its own cuda_utils.hpp, and
+# autoware_cuda_utils defines it differently in cuda_check_error.hpp, causing -Werror failure.
+# Adding #undef before each #define prevents the redefinition error.
+
+CENTERPOINT_CUDA_UTILS="${SCRIPT_DIR}/autoware/src/universe/autoware_universe/perception/autoware_lidar_centerpoint/include/autoware/lidar_centerpoint/cuda_utils.hpp"
+if [ -f "${CENTERPOINT_CUDA_UTILS}" ]; then
+    if grep -q '^#undef CHECK_CUDA_ERROR' "${CENTERPOINT_CUDA_UTILS}"; then
+        echo "✓ CHECK_CUDA_ERROR #undef already present in lidar_centerpoint cuda_utils.hpp"
+    else
+        sed -i 's/^#define CHECK_CUDA_ERROR(e)/#undef CHECK_CUDA_ERROR\n#define CHECK_CUDA_ERROR(e)/' "${CENTERPOINT_CUDA_UTILS}"
+        echo "✓ Added #undef CHECK_CUDA_ERROR to lidar_centerpoint cuda_utils.hpp"
+    fi
+else
+    echo "Warning: ${CENTERPOINT_CUDA_UTILS} not found"
+fi
+
+CUDA_UTILS_SRC="${SCRIPT_DIR}/autoware/src/universe/autoware_universe/sensing/autoware_cuda_utils/include/autoware/cuda_utils/cuda_check_error.hpp"
+if [ -f "${CUDA_UTILS_SRC}" ]; then
+    if grep -q '^#undef CHECK_CUDA_ERROR' "${CUDA_UTILS_SRC}"; then
+        echo "✓ CHECK_CUDA_ERROR #undef already present in autoware_cuda_utils cuda_check_error.hpp (source)"
+    else
+        sed -i 's/^#define CHECK_CUDA_ERROR(e)/#undef CHECK_CUDA_ERROR\n#define CHECK_CUDA_ERROR(e)/' "${CUDA_UTILS_SRC}"
+        echo "✓ Added #undef CHECK_CUDA_ERROR to autoware_cuda_utils cuda_check_error.hpp (source)"
+    fi
+else
+    echo "Warning: ${CUDA_UTILS_SRC} not found"
+fi
+
+CUDA_UTILS_INSTALLED="${SCRIPT_DIR}/autoware/install/autoware_cuda_utils/include/autoware/cuda_utils/cuda_check_error.hpp"
+if [ -f "${CUDA_UTILS_INSTALLED}" ]; then
+    if grep -q '^#undef CHECK_CUDA_ERROR' "${CUDA_UTILS_INSTALLED}"; then
+        echo "✓ CHECK_CUDA_ERROR #undef already present in autoware_cuda_utils cuda_check_error.hpp (installed)"
+    else
+        sed -i 's/^#define CHECK_CUDA_ERROR(e)/#undef CHECK_CUDA_ERROR\n#define CHECK_CUDA_ERROR(e)/' "${CUDA_UTILS_INSTALLED}"
+        echo "✓ Added #undef CHECK_CUDA_ERROR to autoware_cuda_utils cuda_check_error.hpp (installed)"
+    fi
+else
+    echo "Warning: ${CUDA_UTILS_INSTALLED} not found (autoware_cuda_utils may not be built yet)"
+fi
+
+# ==================== Fix 5: OpenCV missing modules referenced by cv_bridge ====================
+# ros-humble-cv-bridge's cmake config references OpenCV contrib modules (alphamat, barcode, hdf, viz)
+# that may not exist in the custom OpenCV build, causing linker failures.
+# Two-pronged fix: (a) try to patch cv_bridge cmake (needs sudo), (b) create stub .so files as fallback.
+OPENCV_STUBS_DIR="${HOME}/.local/lib/opencv_stubs"
+MISSING_MODULES="opencv_alphamat opencv_barcode opencv_hdf opencv_viz"
+STUBS_NEEDED=0
+for mod in $MISSING_MODULES; do
+    if [ ! -f "/usr/local/lib/lib${mod}.so" ]; then
+        STUBS_NEEDED=1
+        break
+    fi
+done
+
+if [ "$STUBS_NEEDED" = "1" ]; then
+    mkdir -p "${OPENCV_STUBS_DIR}"
+    for mod in $MISSING_MODULES; do
+        if [ ! -f "/usr/local/lib/lib${mod}.so" ] && [ ! -f "${OPENCV_STUBS_DIR}/lib${mod}.so" ]; then
+            echo "void __stub_${mod}(void) {}" | gcc -shared -x c - -o "${OPENCV_STUBS_DIR}/lib${mod}.so" -Wl,--soname,lib${mod}.so 2>/dev/null \
+                && echo "  Created stub: ${OPENCV_STUBS_DIR}/lib${mod}.so" \
+                || echo "  Warning: failed to create stub for ${mod}"
+        fi
+    done
+    echo "✓ OpenCV stub libraries created in ${OPENCV_STUBS_DIR}"
+
+    CV_BRIDGE_EXTRAS="/opt/ros/humble/share/cv_bridge/cmake/cv_bridge-extras.cmake"
+    if [ -f "${CV_BRIDGE_EXTRAS}" ]; then
+        NEEDS_PATCH=0
+        for mod in $MISSING_MODULES; do
+            if grep -q "${mod}" "${CV_BRIDGE_EXTRAS}" && [ ! -f "/usr/local/lib/lib${mod}.so" ]; then
+                NEEDS_PATCH=1
+                break
+            fi
+        done
+        if [ "$NEEDS_PATCH" = "1" ]; then
+            if sudo -n true 2>/dev/null; then
+                sudo cp "${CV_BRIDGE_EXTRAS}" "${CV_BRIDGE_EXTRAS}.backup"
+                for mod in $MISSING_MODULES; do
+                    if [ ! -f "/usr/local/lib/lib${mod}.so" ]; then
+                        sudo sed -i "s/;${mod}//g" "${CV_BRIDGE_EXTRAS}"
+                        sudo sed -i "s/${mod};//g" "${CV_BRIDGE_EXTRAS}"
+                        sudo sed -i "s/${mod}//g" "${CV_BRIDGE_EXTRAS}"
+                        echo "  Removed non-existent module: ${mod}"
+                    fi
+                done
+                echo "✓ Patched cv_bridge-extras.cmake to remove non-existent OpenCV modules"
+            else
+                echo "⚠ cv_bridge-extras.cmake patch requires sudo (stub libraries used as fallback)"
+            fi
+        else
+            echo "✓ cv_bridge-extras.cmake already patched or all modules exist"
+        fi
+    fi
+else
+    echo "✓ All OpenCV modules referenced by cv_bridge exist"
+fi
+
 echo "✓ All fixes applied successfully"
 

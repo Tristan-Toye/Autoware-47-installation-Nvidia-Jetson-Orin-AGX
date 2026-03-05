@@ -1,0 +1,16 @@
+node_name,short_name,namespace,package,executable,latency_ms,percentage_of_total,percentage_of_longest_path,in_longest_path
+/lidar_centerpoint,lidar_centerpoint,/,lidar_centerpoint,lidar_centerpoint_node,150.0,12.5,0.0,True
+/ndt_scan_matcher,ndt_scan_matcher,/,ndt_scan_matcher,ndt_scan_matcher_node,140.0,11.67,0.0,True
+/behavior_path_planner,behavior_path_planner,/,behavior_path_planner,behavior_path_planner_node,130.0,10.83,0.0,True
+/motion_velocity_planner,motion_velocity_planner,/,motion_velocity_planner,motion_velocity_planner_node,120.0,10.0,0.0,True
+/ekf_localizer,ekf_localizer,/,ekf_localizer,ekf_localizer_node,110.0,9.17,0.0,True
+/euclidean_cluster,euclidean_cluster,/,euclidean_cluster,euclidean_cluster_node,100.0,8.33,0.0,True
+/multi_object_tracker,multi_object_tracker,/,multi_object_tracker,multi_object_tracker_node,90.0,7.5,0.0,True
+/map_based_prediction,map_based_prediction,/,map_based_prediction,map_based_prediction_node,80.0,6.67,0.0,True
+/mission_planner,mission_planner,/,mission_planner,mission_planner_node,70.0,5.83,0.0,False
+/autonomous_emergency_braking,autonomous_emergency_braking,/,autonomous_emergency_braking,autonomous_emergency_braking_node,60.0,5.0,0.0,False
+/occupancy_grid_map_node,occupancy_grid_map_node,/,probabilistic_occupancy_grid_map,occupancy_grid_map_node,50.0,4.17,0.0,False
+/shape_estimation,shape_estimation,/,shape_estimation,shape_estimation_node,40.0,3.33,0.0,False
+/trajectory_follower_controller,trajectory_follower_controller,/,trajectory_follower_nodes,controller_node,30.0,2.5,0.0,False
+/velocity_smoother,velocity_smoother,/,velocity_smoother,velocity_smoother_node,20.0,1.67,0.0,False
+/pointcloud_concatenate_data,pointcloud_concatenate_data,/,pointcloud_preprocessor,pointcloud_concatenate_data_synchronizer_node,10.0,0.83,0.0,False

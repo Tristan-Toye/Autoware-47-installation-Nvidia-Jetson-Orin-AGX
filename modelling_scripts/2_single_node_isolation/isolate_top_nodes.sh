@@ -108,7 +108,7 @@ PARENT_DIR="\$(dirname "\$(dirname "\${SCRIPT_DIR}")")"
 
 # Source environments
 source /opt/ros/humble/setup.bash
-source \${HOME}/autoware/install/setup.bash
+source \${PARENT_DIR}/autoware/install/setup.bash
 
 # Set remapping file path (empty for now - can be customized)
 REMAP_FILE=""

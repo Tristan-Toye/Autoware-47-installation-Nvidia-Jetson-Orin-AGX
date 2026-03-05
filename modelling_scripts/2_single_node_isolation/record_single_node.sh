@@ -70,8 +70,9 @@ INIT_TIMEOUT=$(parse_yaml_value "autoware_init_timeout")
 MAP_PATH="${MAP_PATH:-${HOME}/autoware_map/sample-map-rosbag}"
 ROSBAG_PATH="${ROSBAG_PATH:-${HOME}/autoware_map/sample-rosbag}"
 ROSBAG_RATE="${ROSBAG_RATE:-0.2}"
-REPLAYER_PATH="${REPLAYER_PATH:-${HOME}/ros2_single_node_replayer}"
-AUTOWARE_PATH="${AUTOWARE_PATH:-${HOME}/autoware}"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+REPLAYER_PATH="${REPLAYER_PATH:-${PROJECT_ROOT}/ros2_single_node_replayer}"
+AUTOWARE_PATH="${AUTOWARE_PATH:-${PROJECT_ROOT}/autoware}"
 INIT_TIMEOUT="${INIT_TIMEOUT:-30}"
 
 # Create output directory

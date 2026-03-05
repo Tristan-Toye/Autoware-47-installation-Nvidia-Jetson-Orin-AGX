@@ -54,7 +54,7 @@ def load_caret_data(config):
     arch_file = config.get('architecture_file')
     
     print(f"Loading trace data from: {lttng_path}")
-    lttng = Lttng(lttng_path)
+    lttng = Lttng(lttng_path, validate=False)
     
     if arch_file and Path(arch_file).exists():
         print(f"Loading architecture from: {arch_file}")

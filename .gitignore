@@ -9,6 +9,7 @@
 !caret/
 !modelling_scripts/
 !modelling_scripts/**
+!modelling_scripts/**/
 
 # Ignore files with "flag" in the name
 *flag*

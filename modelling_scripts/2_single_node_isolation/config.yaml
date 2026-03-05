@@ -16,7 +16,7 @@ top_n_nodes: 10
 output_dir: "./single_node_run"
 
 # Path to Autoware installation
-autoware_path: "${HOME}/autoware"
+autoware_path: "/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware"
 
 # Path to ROS2 setup script
 ros2_setup: "/opt/ros/humble/setup.bash"
@@ -28,7 +28,7 @@ rosbag_path: "${HOME}/autoware_map/sample-rosbag"
 rosbag_rate: 0.2
 
 # Path to ros2_single_node_replayer installation
-replayer_path: "${HOME}/ros2_single_node_replayer"
+replayer_path: "/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/ros2_single_node_replayer"
 
 # Map path for Autoware
 map_path: "${HOME}/autoware_map/sample-map-rosbag"

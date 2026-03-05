@@ -1,0 +1,12 @@
+# CARET Analysis Configuration
+trace_dir: "./trace_data/caret_trace_20260305_123523"
+lttng_path: "./trace_data/caret_trace_20260305_123523/lttng"
+architecture_file: "/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/modelling_scripts/1_caret_tracing/results/architecture.yaml"
+output_dir: "/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/modelling_scripts/1_caret_tracing/results"
+
+# Analysis parameters
+lstrip_s: 5  # Remove first 5 seconds of data
+rstrip_s: 2  # Remove last 2 seconds of data
+
+# Graph output settings
+graphs_dir: "/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/modelling_scripts/1_caret_tracing/graphs"

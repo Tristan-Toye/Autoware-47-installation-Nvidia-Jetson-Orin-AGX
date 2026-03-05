@@ -283,7 +283,7 @@ run_build_autoware_clean() {
 
 if [ "$rebuild_failed_packages" = "1" ]; then
 	# Read packages from unable_to_build.txt
-	unable_to_build_file="${SCRIPT_DIR}/unable_to_build.txt"
+	unable_to_build_file="${SCRIPT_DIR}/failed_packages.txt"
 	if [ ! -f "$unable_to_build_file" ]; then
 		echo "Error: unable_to_build.txt not found. Cannot rebuild failed packages." >&2
 		exit 1
@@ -294,12 +294,12 @@ if [ "$rebuild_failed_packages" = "1" ]; then
 	fi
 	# Convert newline-separated list to space-separated
 	packages_to_rebuild=$(tr '\n' ' ' < "$unable_to_build_file" | sed 's/ $//')
-	echo "Rebuilding failed packages from unable_to_build.txt: $packages_to_rebuild"
-	run_build_autoware_clean "${rebuild_autoware}" "autoware_dummy_perception_publisher"
+	echo "Rebuilding failed packages from failed_packages.txt: $packages_to_rebuild"
+	run_build_autoware_clean "${rebuild_autoware}" "${packages_to_rebuild}"
 else
 	run_build_autoware_clean "${rebuild_autoware}"
 fi
-exit 0
+
 set -x
 
 update_bashrc_sources
@@ -344,7 +344,7 @@ echo "#########################################"
 ./setup_network.sh
 sudo ./setup_rqt.sh
 ./install_single_node_replayer.sh
-./install_dear_node_viewer.sh
+# ./install_dear_node_viewer.sh
 
 
 # Install perf tools for Jetson

@@ -1,0 +1,58 @@
+/localization/pose_twist_fusion_filter/ekf_localizer:
+  ros__parameters:
+    diagnostics:
+      ellipse_scale: 3.0
+      error_ellipse_size: 1.5
+      error_ellipse_size_lateral_direction: 0.3
+      pose_no_update_count_threshold_error: 100
+      pose_no_update_count_threshold_warn: 50
+      twist_no_update_count_threshold_error: 100
+      twist_no_update_count_threshold_warn: 50
+      warn_ellipse_size: 1.2
+      warn_ellipse_size_lateral_direction: 0.25
+    misc:
+      pose_frame_id: map
+      threshold_observable_velocity_mps: 0.0
+    node:
+      enable_yaw_bias_estimation: true
+      extend_state_step: 50
+      predict_frequency: 50.0
+      show_debug_info: false
+      tf_rate: 50.0
+    pose_measurement:
+      pose_additional_delay: 0.0
+      pose_gate_dist: 49.5
+      pose_smoothing_steps: 5
+    process_noise:
+      proc_stddev_vx_c: 10.0
+      proc_stddev_wz_c: 5.0
+      proc_stddev_yaw_c: 0.005
+    qos_overrides:
+      /clock:
+        subscription:
+          depth: 1
+          durability: volatile
+          history: keep_last
+          reliability: best_effort
+      /parameter_events:
+        publisher:
+          depth: 1000
+          durability: volatile
+          history: keep_last
+          reliability: reliable
+      /tf:
+        publisher:
+          depth: 100
+          durability: volatile
+          history: keep_last
+          reliability: reliable
+    simple_1d_filter_parameters:
+      pitch_filter_proc_dev: 0.1
+      roll_filter_proc_dev: 0.1
+      z_filter_proc_dev: 5.0
+    twist_measurement:
+      twist_additional_delay: 0.0
+      twist_gate_dist: 46.1
+      twist_smoothing_steps: 2
+    use_sim_time: true
+

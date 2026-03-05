@@ -1,0 +1,4 @@
+comparison,description,total_nodes,agreeing_nodes,agreement_rate_%
+perf_vs_mperf,Nodes where perf_bottleneck == mperf_bottleneck,10,0,0.0
+perf_uses_caret_top10,% of CARET top-10 nodes labelled mem/cache by perf_bottleneck,4,4,100.0
+mperf_uses_caret_top10,% of CARET top-10 nodes labelled mem/cache by mperf_bottleneck,4,0,0.0

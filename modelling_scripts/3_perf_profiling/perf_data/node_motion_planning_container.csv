@@ -1,0 +1,10 @@
+metric,value,formatted
+L1-dcache-load-misses,18280550,"18,280,550"
+L1-dcache-loads,376893089,"376,893,089"
+branch-misses,9559624,"9,559,624"
+branches:u,,N/A
+cache-misses,18280550,"18,280,550"
+cache-references,376870572,"376,870,572"
+context-switches,0,0
+cpu-cycles,2614216182,"2,614,216,182"
+instructions,920328948,"920,328,948"

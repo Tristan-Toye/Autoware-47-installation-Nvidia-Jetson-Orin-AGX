@@ -37,7 +37,8 @@ echo "=============================================="
 
 # Source ROS2 environment
 source /opt/ros/humble/setup.bash
-source "${HOME}/autoware/install/setup.bash"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+source "${PROJECT_ROOT}/autoware/install/setup.bash"
 
 # Find the run command
 RUN_SCRIPT=$(find "${NODE_DIR}" -name "ros2_run_*" -type f | head -1)

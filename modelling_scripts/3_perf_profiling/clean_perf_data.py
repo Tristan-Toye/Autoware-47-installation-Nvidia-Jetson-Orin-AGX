@@ -64,6 +64,9 @@ def parse_perf_output(file_path):
                 if len(groups) >= 2:
                     value_str = groups[0].replace(',', '')
                     metric_name = groups[1]
+                    # Strip perf mode suffixes like :u, :k, :uk
+                    if ':' in metric_name:
+                        metric_name = metric_name.split(':')[0]
                     try:
                         value = int(value_str)
                         metrics[metric_name] = value

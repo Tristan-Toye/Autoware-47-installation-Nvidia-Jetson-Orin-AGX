@@ -51,8 +51,9 @@ fi
 
 # Source ROS2 environment
 source /opt/ros/humble/setup.bash
-if [ -f "${HOME}/autoware/install/setup.bash" ]; then
-    source "${HOME}/autoware/install/setup.bash"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+if [ -f "${PROJECT_ROOT}/autoware/install/setup.bash" ]; then
+    source "${PROJECT_ROOT}/autoware/install/setup.bash"
 fi
 
 # Parse YAML config (simple parsing)

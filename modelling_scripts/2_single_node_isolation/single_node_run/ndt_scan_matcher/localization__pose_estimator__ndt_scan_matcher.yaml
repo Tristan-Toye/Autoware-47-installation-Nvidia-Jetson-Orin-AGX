@@ -1,0 +1,115 @@
+/localization/pose_estimator/ndt_scan_matcher:
+  ros__parameters:
+    covariance:
+      covariance_estimation:
+        covariance_estimation_type: 0
+        initial_pose_offset_model_x:
+        - 0.0
+        - 0.0
+        - 0.5
+        - -0.5
+        - 1.0
+        - -1.0
+        initial_pose_offset_model_y:
+        - 0.5
+        - -0.5
+        - 0.0
+        - 0.0
+        - 0.0
+        - 0.0
+        scale_factor: 1.0
+        temperature: 0.05
+      output_pose_covariance:
+      - 0.0225
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0225
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0225
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.000625
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.000625
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.000625
+    dynamic_map_loading:
+      lidar_radius: 100.0
+      map_radius: 150.0
+      update_distance: 20.0
+    frame:
+      base_frame: base_link
+      map_frame: map
+      ndt_base_frame: ndt_base_link
+    initial_pose_estimation:
+      n_startup_trials: 100
+      particles_num: 200
+    ndt:
+      max_iterations: 30
+      num_threads: 4
+      regularization:
+        enable: false
+        scale_factor: 0.01
+      resolution: 2.0
+      step_size: 0.1
+      trans_epsilon: 0.01
+    qos_overrides:
+      /clock:
+        subscription:
+          depth: 1
+          durability: volatile
+          history: keep_last
+          reliability: best_effort
+      /parameter_events:
+        publisher:
+          depth: 1000
+          durability: volatile
+          history: keep_last
+          reliability: reliable
+      /tf:
+        publisher:
+          depth: 100
+          durability: volatile
+          history: keep_last
+          reliability: reliable
+    score_estimation:
+      converged_param_nearest_voxel_transformation_likelihood: 2.3
+      converged_param_transform_probability: 3.0
+      converged_param_type: 1
+      no_ground_points:
+        enable: false
+        z_margin_for_ground_removal: 0.8
+    sensor_points:
+      required_distance: 10.0
+      timeout_sec: 1.0
+    use_sim_time: true
+    validation:
+      critical_upper_bound_exe_time_ms: 100.0
+      initial_pose_distance_tolerance_m: 10.0
+      initial_pose_timeout_sec: 1.0
+      initial_to_result_distance_tolerance_m: 3.0
+      skipping_publish_num: 5
+

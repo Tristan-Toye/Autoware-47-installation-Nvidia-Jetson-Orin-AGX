@@ -1,0 +1,16 @@
+
+ Performance counter stats for process id '1337981':
+
+       291,705,598      instructions:u            #    0.25  insn per cycle         
+     1,151,347,595      cpu-cycles:u              #    0.840 GHz                    
+   <not supported>      branches:u                                                  
+         5,206,576      branch-misses:u                                             
+          1,370.06 msec task-clock:u              #    0.023 CPUs utilized          
+                 0      context-switches:u        #    0.000 /sec                   
+       129,354,673      L1-dcache-loads:u         #   94.415 M/sec                  
+         7,620,981      L1-dcache-load-misses:u   #    5.89% of all L1-dcache accesses
+       129,354,673      cache-references:u        #   94.415 M/sec                  
+         7,620,981      cache-misses:u            #    5.892 % of all cache refs    
+
+      60.325124299 seconds time elapsed
+

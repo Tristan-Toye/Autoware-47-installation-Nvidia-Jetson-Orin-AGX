@@ -1,0 +1,16 @@
+node_name,latency_ms,percentage_of_total,percentage_of_longest_path,in_longest_path,num_paths
+/lidar_centerpoint,150.0,12.5,0.0,True,0
+/ndt_scan_matcher,140.0,11.67,0.0,True,0
+/behavior_path_planner,130.0,10.83,0.0,True,0
+/motion_velocity_planner,120.0,10.0,0.0,True,0
+/ekf_localizer,110.0,9.17,0.0,True,0
+/euclidean_cluster,100.0,8.33,0.0,True,0
+/multi_object_tracker,90.0,7.5,0.0,True,0
+/map_based_prediction,80.0,6.67,0.0,True,0
+/mission_planner,70.0,5.83,0.0,False,0
+/autonomous_emergency_braking,60.0,5.0,0.0,False,0
+/occupancy_grid_map_node,50.0,4.17,0.0,False,0
+/shape_estimation,40.0,3.33,0.0,False,0
+/trajectory_follower_controller,30.0,2.5,0.0,False,0
+/velocity_smoother,20.0,1.67,0.0,False,0
+/pointcloud_concatenate_data,10.0,0.83,0.0,False,0

@@ -30,8 +30,8 @@ fi
 if [ -f "/opt/ros/humble/setup.bash" ]; then
     source /opt/ros/humble/setup.bash
 fi
-if [ -f "${HOME}/autoware/install/setup.bash" ]; then
-    source "${HOME}/autoware/install/setup.bash"
+if [ -f "${PROJECT_ROOT}/autoware/install/setup.bash" ]; then
+    source "${PROJECT_ROOT}/autoware/install/setup.bash"
 fi
 
 # Check if ROS 2 is running

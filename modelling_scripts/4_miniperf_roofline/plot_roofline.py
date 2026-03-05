@@ -308,8 +308,8 @@ def plot_roofline(df: pd.DataFrame, hw: dict, use_log: bool = True,
         html_out = GRAPHS_DIR / "roofline_interactive.html"
         mpld3.save_html(fig, str(html_out))
         print(f"  Saved: {html_out}  (interactive)")
-    except ImportError:
-        print("  (mpld3 not installed — skipping interactive HTML; pip install mpld3)")
+    except Exception:
+        print("  (mpld3 interactive HTML skipped due to compatibility issue)")
 
     plt.close()
 

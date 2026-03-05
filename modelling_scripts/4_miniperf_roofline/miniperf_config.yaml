@@ -126,8 +126,8 @@ paths:
   libcollector: "${HOME}/miniperf/target/release/libcollector.so"
 
   # Autoware install
-  autoware_root: "${HOME}/autoware"
-  autoware_setup: "${HOME}/autoware/install/setup.bash"
+  autoware_root: "/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware"
+  autoware_setup: "/home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/setup.bash"
   ros2_setup: "/opt/ros/humble/setup.bash"
 
   # Single node replayer recordings (from experiment 2)

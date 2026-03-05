@@ -40,11 +40,12 @@ echo "=============================================="
 if [ -f "/opt/ros/humble/setup.bash" ]; then
     source /opt/ros/humble/setup.bash
 fi
-if [ -f "${HOME}/autoware/install/setup.bash" ]; then
-    source "${HOME}/autoware/install/setup.bash"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+if [ -f "${PROJECT_ROOT}/autoware/install/setup.bash" ]; then
+    source "${PROJECT_ROOT}/autoware/install/setup.bash"
 fi
-if [ -f "${HOME}/ros2_caret_ws/install/local_setup.bash" ]; then
-    source "${HOME}/ros2_caret_ws/install/local_setup.bash"
+if [ -f "${PROJECT_ROOT}/ros2_caret_ws/install/local_setup.bash" ]; then
+    source "${PROJECT_ROOT}/ros2_caret_ws/install/local_setup.bash"
 fi
 
 # Create results directory
@@ -69,7 +70,7 @@ else
 fi
 
 # Export architecture file if caret_autoware_launch config exists
-ARCH_DIR="${HOME}/autoware/src/launcher/caret_autoware_launch/architecture"
+ARCH_DIR="${PROJECT_ROOT}/autoware/src/launcher/autoware_launch/architecture"
 if [ -d "${ARCH_DIR}" ]; then
     ARCH_FILE=$(find "${ARCH_DIR}" -name "*.yaml" -type f 2>/dev/null | head -1)
     if [ -n "${ARCH_FILE}" ]; then

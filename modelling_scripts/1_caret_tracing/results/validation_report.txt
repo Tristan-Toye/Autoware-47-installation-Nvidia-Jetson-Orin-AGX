@@ -1,0 +1,7 @@
+Succeed to find record_cpp_impl. the C++ version will be used.
+converting:   0%|          | 0/28403 [00:00<?, ?it/s]converting:  29%|██▉       | 8279/28403 [00:01<00:02, 8278.06it/s]converting:  59%|█████▉    | 16793/28403 [00:02<00:01, 8416.39it/s]converting:  90%|████████▉ | 25467/28403 [00:03<00:00, 8533.64it/s]converting: 28451it [00:03, 8428.15it/s]                           
+28403 events found.
+loading:   0%|          | 0/10381 [00:00<?, ?it/s]loading: 100%|██████████| 10381/10381 [00:00<00:00, 46114.54it/s]
+loading:   0%|          | 0/18022 [00:00<?, ?it/s]loading: 100%|██████████| 18022/18022 [00:00<00:00, 43632.56it/s]
+filtered to 28403 events.
+WARNING : 2026-03-05 12:41:24 | Failed to find dds trace point added by LD_PRELOAD. Measurement results will not be correct. Function symbols used for hooks may be hidden in the DDS layer.

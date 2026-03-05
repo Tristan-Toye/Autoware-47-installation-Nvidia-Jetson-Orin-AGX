@@ -18,6 +18,13 @@ if [ -z "$SCRIPT_DIR" ]; then
   exit 1
 fi
 
+export PATH="/usr/local/cuda/bin:$PATH"
+OPENCV_STUBS_DIR="${HOME}/.local/lib/opencv_stubs"
+if [ -d "${OPENCV_STUBS_DIR}" ]; then
+  export LIBRARY_PATH="${OPENCV_STUBS_DIR}${LIBRARY_PATH:+:${LIBRARY_PATH}}"
+  export LDFLAGS="-L${OPENCV_STUBS_DIR} ${LDFLAGS:-}"
+fi
+
 
 # Fix for CARET linking issue: https://github.com/tier4/caret/issues/69
 # This ensures ament_cmake_auto uses SYSTEM dependencies, which makes CMake prefer
@@ -260,6 +267,7 @@ build_with_retry() {
 	
 	# build_autoware_addition.sh
 	CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF"
+	export CXXFLAGS="${CXXFLAGS:-} -Wno-error=deprecated-declarations -Wno-error=pedantic -Wno-error=narrowing -Wno-error=maybe-uninitialized -Wno-error=attributes"
 	if [ "${CARET_VERBOSE_LINK:-0}" = "1" ]; then
 		CMAKE_ARGS="${CMAKE_ARGS} -DCMAKE_VERBOSE_MAKEFILE=ON"
 		echo "Verbose link logging enabled (CARET_VERBOSE_LINK=1)"
@@ -282,9 +290,9 @@ build_with_retry() {
 	
 	local build_exit_code=${PIPESTATUS[0]}
 	
-	# Detect failed packages
+	# Detect failed packages (|| true prevents set -e from aborting on return 1)
 	rm -f "$failed_packages_file"
-	detect_failed_packages "$build_log" "$failed_packages_file"
+	detect_failed_packages "$build_log" "$failed_packages_file" || true
 	
 	if [ ! -s "$failed_packages_file" ]; then
 		echo "✓ All packages built successfully!"
@@ -405,8 +413,12 @@ apply_pcl_pedantic_fix() {
 apply_pcl_pedantic_fix
 
 # https://tier4.github.io/caret_doc/main/faq/known_issues/#build
-sudo cp /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake.bak
-sudo sed -i -e 's/\/opt\/ros\/humble\/lib\/libtracetools.so;//g' /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake
+if grep -q 'libtracetools.so' /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake 2>/dev/null; then
+  sudo cp /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake.bak
+  sudo sed -i -e 's/\/opt\/ros\/humble\/lib\/libtracetools.so;//g' /opt/ros/humble/share/pcl_ros/cmake/export_pcl_rosExport.cmake
+else
+  echo "✓ pcl_ros export_pcl_rosExport.cmake already patched (libtracetools.so reference removed)"
+fi
 # Clean any Autoware overlay from the current shell environment so that CMake
 # sees a clean base (opt/ros + ros2_humble + CARET) instead of resolving
 # rclcpp / friends from a previously sourced autoware/install.
