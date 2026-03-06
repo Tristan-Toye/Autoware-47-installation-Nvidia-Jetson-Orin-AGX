@@ -1,0 +1,5 @@
+source;share/autoware_lidar_centerpoint/local_setup.bash
+source;share/autoware_lidar_centerpoint/local_setup.dsv
+source;share/autoware_lidar_centerpoint/local_setup.ps1
+source;share/autoware_lidar_centerpoint/local_setup.sh
+source;share/autoware_lidar_centerpoint/local_setup.zsh

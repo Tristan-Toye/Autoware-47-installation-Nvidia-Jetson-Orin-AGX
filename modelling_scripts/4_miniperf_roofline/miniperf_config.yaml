@@ -14,77 +14,77 @@
 # ---------------------------------------------------------------------------
 target_nodes:
   - node_name: "lidar_centerpoint"
-    package: "lidar_centerpoint"
+    package: "autoware_lidar_centerpoint"
     executable: "lidar_centerpoint_node"
     description: "3D object detection using CenterPoint model"
 
   - node_name: "ndt_scan_matcher"
-    package: "ndt_scan_matcher"
+    package: "autoware_ndt_scan_matcher"
     executable: "ndt_scan_matcher_node"
     description: "LiDAR-based point cloud localization"
 
   - node_name: "behavior_path_planner"
-    package: "behavior_path_planner"
+    package: "autoware_behavior_path_planner"
     executable: "behavior_path_planner_node"
     description: "High-level path planning with lane changes"
 
   - node_name: "motion_velocity_planner"
-    package: "motion_velocity_planner"
+    package: "autoware_motion_velocity_planner"
     executable: "motion_velocity_planner_node"
     description: "Velocity planning along the planned path"
 
   - node_name: "ekf_localizer"
-    package: "ekf_localizer"
+    package: "autoware_ekf_localizer"
     executable: "ekf_localizer_node"
     description: "EKF-based pose estimation"
 
   - node_name: "euclidean_cluster"
-    package: "euclidean_cluster"
+    package: "autoware_euclidean_cluster_object_detector"
     executable: "euclidean_cluster_node"
     description: "LiDAR point cloud clustering"
 
   - node_name: "multi_object_tracker"
-    package: "multi_object_tracker"
+    package: "autoware_multi_object_tracker"
     executable: "multi_object_tracker_node"
     description: "Multi-object tracking across frames"
 
   - node_name: "map_based_prediction"
-    package: "map_based_prediction"
+    package: "autoware_map_based_prediction"
     executable: "map_based_prediction_node"
     description: "Trajectory prediction using HD map"
 
   - node_name: "mission_planner"
-    package: "mission_planner"
+    package: "autoware_mission_planner"
     executable: "mission_planner_node"
     description: "Route planning from start to goal"
 
   - node_name: "autonomous_emergency_braking"
-    package: "autonomous_emergency_braking"
+    package: "autoware_autonomous_emergency_braking"
     executable: "autonomous_emergency_braking_node"
     description: "Emergency braking safety module"
 
   - node_name: "occupancy_grid_map_node"
-    package: "probabilistic_occupancy_grid_map"
+    package: "autoware_probabilistic_occupancy_grid_map"
     executable: "occupancy_grid_map_node"
     description: "2D occupancy grid from LiDAR"
 
   - node_name: "shape_estimation"
-    package: "shape_estimation"
+    package: "autoware_shape_estimation"
     executable: "shape_estimation_node"
     description: "Object shape/size estimation"
 
   - node_name: "trajectory_follower_controller"
-    package: "trajectory_follower_nodes"
+    package: "autoware_trajectory_follower_node"
     executable: "controller_node"
     description: "Low-level trajectory tracking controller"
 
   - node_name: "velocity_smoother"
-    package: "velocity_smoother"
+    package: "autoware_velocity_smoother"
     executable: "velocity_smoother_node"
     description: "Velocity profile smoother"
 
   - node_name: "pointcloud_concatenate_data"
-    package: "pointcloud_preprocessor"
+    package: "autoware_pointcloud_preprocessor"
     executable: "pointcloud_concatenate_data_synchronizer_node"
     description: "Merges multiple LiDAR point clouds"
 
@@ -168,7 +168,7 @@ build:
   clang_cxx: "clang++-19"
   optimization_level: "-O3"
   debug_info: "-g"
-  extra_cxxflags: "-fno-omit-frame-pointer"
+  extra_cxxflags: "-fno-omit-frame-pointer -Wno-error -Wno-enum-constexpr-conversion -Wno-deprecated-copy -Wno-c11-extensions"
   # colcon build isolation mode
   colcon_build_base: "build_instrumented"
   colcon_install_base: "install_instrumented"

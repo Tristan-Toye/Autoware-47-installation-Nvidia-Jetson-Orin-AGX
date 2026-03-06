@@ -1,0 +1,1 @@
+autoware_perception_msgs;autoware_point_types;autoware_utils_debug;autoware_utils_diagnostics;autoware_utils_system;geometry_msgs;libpcl-all-dev;pcl_conversions;rclcpp;rclcpp_components;sensor_msgs;autoware_crop_box_filter;ament_cmake_gtest;ament_lint_auto;autoware_lint_common

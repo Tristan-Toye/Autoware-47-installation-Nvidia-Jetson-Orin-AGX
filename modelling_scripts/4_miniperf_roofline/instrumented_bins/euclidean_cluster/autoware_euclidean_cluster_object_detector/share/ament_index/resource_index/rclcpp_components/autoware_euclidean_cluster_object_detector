@@ -1,0 +1,2 @@
+autoware::euclidean_cluster::EuclideanClusterNode;lib/libautoware_euclidean_cluster_object_detector_node_core.so
+autoware::euclidean_cluster::VoxelGridBasedEuclideanClusterNode;lib/libautoware_euclidean_cluster_object_detector_voxel_grid_node_core.so

@@ -155,6 +155,17 @@ clusters:
       - "armv8_cortex_a78/bus_cycles/"
       - "armv8_cortex_a78/mem_access/"
 
+  - name: "arm_fp_operations"
+    description: "ARM floating-point and SIMD operation counts for roofline analysis"
+    arm_specific: true
+    metrics:
+      - "r0075"
+      - "r0076"
+      - "armv8_cortex_a78/inst_retired/"
+      - "armv8_cortex_a78/cpu_cycles/"
+      - "armv8_cortex_a78/ll_cache_miss_rd/"
+      - "task-clock"
+
 # ===========================================================================
 # Derived Metrics Configuration
 # ===========================================================================

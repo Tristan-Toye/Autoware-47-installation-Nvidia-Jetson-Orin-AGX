@@ -1,0 +1,1 @@
+autoware_object_recognition_utils:autoware_perception_msgs:autoware_utils_debug:autoware_utils_geometry:autoware_utils_math:diagnostic_updater:eigen:glog:mussp:nav_msgs:rclcpp:rclcpp_components:rosbag2_cpp:tf2:tf2_ros:unique_identifier_msgs:visualization_msgs

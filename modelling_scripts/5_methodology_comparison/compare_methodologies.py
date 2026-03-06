@@ -42,10 +42,11 @@ BASE       = SCRIPT_DIR / ".."
 OUTPUT_DIR = SCRIPT_DIR / "results"
 
 # ── Input paths ──────────────────────────────────────────────────────────────
-CARET_CSV   = BASE / "1_caret_tracing/results/node_latency_ranking.csv"
-PERF_CSV    = BASE / "3_perf_profiling/perf_data/agnostic_metrics.csv"
-MPERF_CSV   = BASE / "4_miniperf_roofline/results/miniperf_roofline_agg.csv"
-MPERF_STAT  = BASE / "4_miniperf_roofline/results/miniperf_stat.csv"
+CARET_CSV      = BASE / "1_caret_tracing/results/node_latency_ranking.csv"
+PERF_CSV       = BASE / "3_perf_profiling/perf_data/agnostic_metrics.csv"
+PERF_ROOF_CSV  = BASE / "3_perf_profiling/perf_data/perf_roofline.csv"
+MPERF_CSV      = BASE / "4_miniperf_roofline/results/miniperf_roofline_agg.csv"
+MPERF_STAT     = BASE / "4_miniperf_roofline/results/miniperf_stat.csv"
 
 
 # ---------------------------------------------------------------------------
@@ -117,14 +118,29 @@ def load_perf() -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.read_csv(PERF_CSV, index_col="node_name")
     df.index = df.index.map(lambda n: str(n).split("/")[-1])
-    keep = {
-        "ops_per_byte":                "perf_ops_per_byte",
-        "overall_cache_hit_rate_%":    "perf_cache_hit_rate",
-        "primary_bottleneck":          "perf_raw_bottleneck",
-    }
+
+    # Prefer FP-based dual-estimate columns; fall back to legacy ops_per_byte
+    keep = {}
+    if "flops_per_byte_conservative" in df.columns:
+        keep.update({
+            "flops_per_byte_conservative": "perf_ai_conservative",
+            "flops_per_byte_fma":          "perf_ai_fma",
+            "fp_fraction":                 "perf_fp_fraction",
+            "simd_fraction":               "perf_simd_fraction",
+        })
+    if "ops_per_byte" in df.columns and "flops_per_byte_conservative" not in df.columns:
+        keep["ops_per_byte"] = "perf_ops_per_byte"
+    keep.update({
+        "overall_cache_hit_rate_%": "perf_cache_hit_rate",
+        "primary_bottleneck":       "perf_raw_bottleneck",
+    })
+
     df = df[[c for c in keep if c in df.columns]].rename(columns=keep)
     if "perf_raw_bottleneck" in df.columns:
         df["perf_bottleneck"] = df["perf_raw_bottleneck"].apply(normalise_bottleneck)
+    elif "perf_ai_conservative" in df.columns:
+        df["perf_bottleneck"] = df["perf_ai_conservative"].apply(
+            lambda x: bottleneck_from_ai(x, ridge=0.5156))
     elif "perf_ops_per_byte" in df.columns:
         df["perf_bottleneck"] = df["perf_ops_per_byte"].apply(bottleneck_from_ops_per_byte)
     return df
@@ -218,9 +234,15 @@ def generate_markdown_summary(df: pd.DataFrame, agreement: pd.DataFrame) -> str:
         "",
         "## Per-Node Comparison Table",
         "",
-        "| Node | CARET Rank | CARET Latency (ms) | perf Bottleneck | miniperf AI (FLOPs/B) | miniperf Bottleneck |",
-        "|---|---|---|---|---|---|",
     ]
+
+    has_perf_ai = "perf_ai_conservative" in df.columns
+    if has_perf_ai:
+        lines.append("| Node | CARET Rank | CARET Latency (ms) | perf AI (cons/FMA) | perf Bottleneck | miniperf AI (FLOPs/B) | miniperf Bottleneck |")
+        lines.append("|---|---|---|---|---|---|---|")
+    else:
+        lines.append("| Node | CARET Rank | CARET Latency (ms) | perf Bottleneck | miniperf AI (FLOPs/B) | miniperf Bottleneck |")
+        lines.append("|---|---|---|---|---|---|")
 
     sort_df = df.sort_values("caret_rank") if "caret_rank" in df.columns else df
     for node, row in sort_df.iterrows():
@@ -229,7 +251,12 @@ def generate_markdown_summary(df: pd.DataFrame, agreement: pd.DataFrame) -> str:
         pb     = row.get("perf_bottleneck", "–")
         ai     = f"{row['mperf_arithmetic_intensity']:.3f}" if "mperf_arithmetic_intensity" in row and pd.notna(row.get("mperf_arithmetic_intensity")) else "–"
         mb     = row.get("mperf_bottleneck", "–")
-        lines.append(f"| `{node}` | {rank} | {lat} | {pb} | {ai} | {mb} |")
+        if has_perf_ai:
+            aic = f"{row['perf_ai_conservative']:.3f}" if pd.notna(row.get("perf_ai_conservative")) else "–"
+            aif = f"{row['perf_ai_fma']:.3f}" if pd.notna(row.get("perf_ai_fma")) else "–"
+            lines.append(f"| `{node}` | {rank} | {lat} | {aic} / {aif} | {pb} | {ai} | {mb} |")
+        else:
+            lines.append(f"| `{node}` | {rank} | {lat} | {pb} | {ai} | {mb} |")
 
     lines += [
         "",

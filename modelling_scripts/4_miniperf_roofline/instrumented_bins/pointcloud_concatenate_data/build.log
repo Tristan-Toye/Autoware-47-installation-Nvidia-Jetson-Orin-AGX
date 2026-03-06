@@ -1,0 +1,101 @@
+[4.175s] WARNING:colcon.colcon_core.package_selection:Some selected packages are already built in one or more underlay workspaces:
+	'autoware_pointcloud_preprocessor' is in: /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_pointcloud_preprocessor
+If a package in a merged underlay workspace is overridden and it installs headers, then all packages in the overlay must sort their include directories by workspace order. Failure to do so may result in build failures or undefined behavior at run time.
+If the overridden package is used by another package in any underlay, then the overriding package in the overlay must be API and ABI compatible or undefined behavior at run time may occur.
+
+If you understand the risks and want to override a package anyways, add the following to the command line:
+	--allow-overriding autoware_pointcloud_preprocessor
+
+This may be promoted to an error in a future release of colcon-override-check.
+Starting >>> autoware_pointcloud_preprocessor
+[4.285s] WARNING:colcon.colcon_core.shell:The following packages are in the workspace but haven't been built:
+- autoware_common_msgs
+- autoware_internal_debug_msgs
+- autoware_internal_metric_msgs
+- autoware_lint_common
+- autoware_map_msgs
+- autoware_perception_msgs
+- autoware_sensing_msgs
+- managed_transform_buffer
+- autoware_cmake
+- autoware_internal_perception_msgs
+- autoware_planning_msgs
+- autoware_internal_planning_msgs
+- autoware_lanelet2_extension
+- autoware_pcl_extensions
+- autoware_point_types
+- autoware_utils_diagnostics
+- autoware_utils_logging
+- autoware_utils_math
+- autoware_utils_rclcpp
+- autoware_utils_system
+- autoware_utils_uuid
+- autoware_utils_visualization
+- autoware_vehicle_msgs
+- autoware_internal_msgs
+- autoware_utils_geometry
+- autoware_utils_debug
+- autoware_utils_tf
+- autoware_utils_pcl
+- autoware_utils
+They are being used from the following locations instead:
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_common_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_internal_debug_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_internal_metric_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_lint_common
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_map_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_perception_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_sensing_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/managed_transform_buffer
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_cmake
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_internal_perception_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_planning_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_internal_planning_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_lanelet2_extension
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_pcl_extensions
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_point_types
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_diagnostics
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_logging
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_math
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_rclcpp
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_system
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_uuid
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_visualization
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_vehicle_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_internal_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_geometry
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_debug
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_tf
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_pcl
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils
+To suppress this warning ignore these packages in the workspace:
+--packages-ignore autoware_common_msgs autoware_internal_debug_msgs autoware_internal_metric_msgs autoware_lint_common autoware_map_msgs autoware_perception_msgs autoware_sensing_msgs managed_transform_buffer autoware_cmake autoware_internal_perception_msgs autoware_planning_msgs autoware_internal_planning_msgs autoware_lanelet2_extension autoware_pcl_extensions autoware_point_types autoware_utils_diagnostics autoware_utils_logging autoware_utils_math autoware_utils_rclcpp autoware_utils_system autoware_utils_uuid autoware_utils_visualization autoware_vehicle_msgs autoware_internal_msgs autoware_utils_geometry autoware_utils_debug autoware_utils_tf autoware_utils_pcl autoware_utils
+--- stderr: autoware_pointcloud_preprocessor
+CMake Error at /usr/lib/cmake/Ceres/CeresConfig.cmake:85 (message):
+  Failed to find Ceres - Missing required Ceres dependency: glog.
+Call Stack (most recent call first):
+  /usr/lib/cmake/Ceres/CeresConfig.cmake:249 (ceres_report_not_found)
+  /usr/share/cmake-3.22/Modules/CMakeFindDependencyMacro.cmake:47 (find_package)
+  /opt/ros/humble/share/sophus/cmake/SophusConfig.cmake:21 (find_dependency)
+  CMakeLists.txt:12 (find_package)
+
+
+CMake Error at /usr/share/cmake-3.22/Modules/CMakeFindDependencyMacro.cmake:47 (find_package):
+  Found package configuration file:
+
+    /usr/lib/cmake/Ceres/CeresConfig.cmake
+
+  but it set Ceres_FOUND to FALSE so package "Ceres" is considered to be NOT
+  FOUND.
+Call Stack (most recent call first):
+  /opt/ros/humble/share/sophus/cmake/SophusConfig.cmake:21 (find_dependency)
+  CMakeLists.txt:12 (find_package)
+
+
+---
+Failed   <<< autoware_pointcloud_preprocessor [45.2s, exited with code 1]
+[Processing: autoware_pointcloud_preprocessor]
+
+Summary: 0 packages finished [49.1s]
+  1 package failed: autoware_pointcloud_preprocessor
+  1 package had stderr output: autoware_pointcloud_preprocessor

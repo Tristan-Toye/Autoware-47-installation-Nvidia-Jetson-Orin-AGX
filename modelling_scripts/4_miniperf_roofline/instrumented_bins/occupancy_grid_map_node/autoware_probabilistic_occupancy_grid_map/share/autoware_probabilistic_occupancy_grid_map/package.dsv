@@ -1,0 +1,5 @@
+source;share/autoware_probabilistic_occupancy_grid_map/local_setup.bash
+source;share/autoware_probabilistic_occupancy_grid_map/local_setup.dsv
+source;share/autoware_probabilistic_occupancy_grid_map/local_setup.ps1
+source;share/autoware_probabilistic_occupancy_grid_map/local_setup.sh
+source;share/autoware_probabilistic_occupancy_grid_map/local_setup.zsh

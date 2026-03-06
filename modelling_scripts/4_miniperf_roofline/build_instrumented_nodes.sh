@@ -118,10 +118,12 @@ source "${AUTOWARE_SETUP}" 2>/dev/null || true
 # ─── Compiler flags including the miniperf plugin ─────────────────────────────
 # The plugin flag tells Clang to load and run the miniperf LLVM pass over
 # each translation unit's IR before code generation.
+GCC_INSTALL_DIR=$(dirname "$(gcc -print-file-name=libstdc++.so)" 2>/dev/null)
+CLANG_WRAPPER="${SCRIPT_DIR}/clang_wrapper.sh"
 MINIPERF_CXXFLAGS="${OPT_LEVEL} ${DEBUG_FLAG} ${EXTRA_FLAGS} \
     -Xclang -fpass-plugin=${PLUGIN_SO}"
 
-MINIPERF_LDFLAGS="-L${LIBCOLLECTOR_DIR} -lcollector \
+MINIPERF_LDFLAGS="-L${LIBCOLLECTOR_DIR} -L${GCC_INSTALL_DIR} -lcollector \
     -Wl,-rpath,${LIBCOLLECTOR_DIR}"
 
 mkdir -p "${OUTPUT_DIR}"
@@ -139,15 +141,18 @@ build_node() {
 
     # colcon build for a single package with instrumented flags
     local build_cmd
-    build_cmd="colcon build \
+    build_cmd="CXXFLAGS='-Wno-error -Wno-enum-constexpr-conversion -Wno-deprecated-copy -Wno-c11-extensions' \
+        colcon build \
         --packages-select ${package} \
+        --allow-overriding ${package} \
         --cmake-args \
             -DCMAKE_C_COMPILER=clang-${CLANG_VER} \
-            -DCMAKE_CXX_COMPILER=clang++-${CLANG_VER} \
+            -DCMAKE_CXX_COMPILER=${CLANG_WRAPPER} \
             -DCMAKE_CXX_FLAGS='${MINIPERF_CXXFLAGS}' \
             -DCMAKE_EXE_LINKER_FLAGS='${MINIPERF_LDFLAGS}' \
             -DCMAKE_SHARED_LINKER_FLAGS='${MINIPERF_LDFLAGS}' \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUnwind_INCLUDE_DIR=/usr/include/libunwind \
         --build-base ${AUTOWARE_ROOT}/${BUILD_BASE}/${package} \
         --install-base ${AUTOWARE_ROOT}/${INSTALL_BASE}/${package}"
 

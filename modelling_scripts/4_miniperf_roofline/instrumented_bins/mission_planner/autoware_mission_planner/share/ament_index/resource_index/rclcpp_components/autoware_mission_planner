@@ -1,0 +1,2 @@
+autoware::mission_planner::GoalPoseVisualizer;lib/libgoal_pose_visualizer_component.so
+autoware::mission_planner::MissionPlanner;lib/libautoware_mission_planner_component.so

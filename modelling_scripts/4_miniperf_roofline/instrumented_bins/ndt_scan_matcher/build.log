@@ -1,0 +1,55 @@
+[4.092s] WARNING:colcon.colcon_core.package_selection:Some selected packages are already built in one or more underlay workspaces:
+	'autoware_ndt_scan_matcher' is in: /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_ndt_scan_matcher
+If a package in a merged underlay workspace is overridden and it installs headers, then all packages in the overlay must sort their include directories by workspace order. Failure to do so may result in build failures or undefined behavior at run time.
+If the overridden package is used by another package in any underlay, then the overriding package in the overlay must be API and ABI compatible or undefined behavior at run time may occur.
+
+If you understand the risks and want to override a package anyways, add the following to the command line:
+	--allow-overriding autoware_ndt_scan_matcher
+
+This may be promoted to an error in a future release of colcon-override-check.
+Starting >>> autoware_ndt_scan_matcher
+[4.211s] WARNING:colcon.colcon_core.shell:The following packages are in the workspace but haven't been built:
+- autoware_common_msgs
+- autoware_internal_debug_msgs
+- autoware_lint_common
+- autoware_map_msgs
+- autoware_perception_msgs
+- autoware_cmake
+- autoware_internal_localization_msgs
+- autoware_planning_msgs
+- autoware_internal_planning_msgs
+- autoware_localization_util
+- autoware_qos_utils
+- autoware_utils_diagnostics
+- autoware_utils_logging
+- autoware_utils_math
+- autoware_utils_system
+- autoware_utils_visualization
+- autoware_utils_geometry
+- autoware_utils_tf
+- autoware_utils_pcl
+They are being used from the following locations instead:
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_common_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_internal_debug_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_lint_common
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_map_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_perception_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_cmake
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_internal_localization_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_planning_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_internal_planning_msgs
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_localization_util
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_qos_utils
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_diagnostics
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_logging
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_math
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_system
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_visualization
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_geometry
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_tf
+- /home/tristan-toye/Autoware-47-installation-Nvidia-Jetson-Orin-AGX/autoware/install/autoware_utils_pcl
+To suppress this warning ignore these packages in the workspace:
+--packages-ignore autoware_common_msgs autoware_internal_debug_msgs autoware_lint_common autoware_map_msgs autoware_perception_msgs autoware_cmake autoware_internal_localization_msgs autoware_planning_msgs autoware_internal_planning_msgs autoware_localization_util autoware_qos_utils autoware_utils_diagnostics autoware_utils_logging autoware_utils_math autoware_utils_system autoware_utils_visualization autoware_utils_geometry autoware_utils_tf autoware_utils_pcl
+Finished <<< autoware_ndt_scan_matcher [2.34s]
+
+Summary: 1 package finished [6.18s]
